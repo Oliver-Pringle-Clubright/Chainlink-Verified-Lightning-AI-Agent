@@ -18,6 +18,7 @@ using LightningAgent.Api.Hubs;
 using LightningAgent.Api.Middleware;
 using LightningAgent.Api.Services;
 using LightningAgent.Data.Migrations;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -99,8 +100,7 @@ builder.Services.AddHostedService<PriceFeedRefresher>();
 // ── MVC + SignalR + Swagger ─────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 
 // ── CORS (allow all for dev) ────────────────────────────────────────
 builder.Services.AddCors(options =>
@@ -133,20 +133,12 @@ app.UseMiddleware<RateLimitingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseCors();
 app.MapControllers();
 app.MapHub<AgentNotificationHub>("/hubs/agent-notifications");
-
-// ── Health check ────────────────────────────────────────────────────
-app.MapGet("/api/health", () => Results.Ok(new
-{
-    status = "healthy",
-    database = "connected",
-    timestamp = DateTime.UtcNow
-}));
 
 app.Run();

@@ -1,4 +1,5 @@
 using LightningAgent.Core.Interfaces.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -8,14 +9,14 @@ public class SpendLimitResetter : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
 
-    private readonly ISpendLimitService _spendLimitService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SpendLimitResetter> _logger;
 
     public SpendLimitResetter(
-        ISpendLimitService spendLimitService,
+        IServiceScopeFactory scopeFactory,
         ILogger<SpendLimitResetter> logger)
     {
-        _spendLimitService = spendLimitService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -27,7 +28,10 @@ public class SpendLimitResetter : BackgroundService
         {
             try
             {
-                var resetCount = await _spendLimitService.ResetExpiredPeriodsAsync(stoppingToken);
+                using var scope = _scopeFactory.CreateScope();
+                var spendLimitService = scope.ServiceProvider.GetRequiredService<ISpendLimitService>();
+
+                var resetCount = await spendLimitService.ResetExpiredPeriodsAsync(stoppingToken);
 
                 if (resetCount > 0)
                 {

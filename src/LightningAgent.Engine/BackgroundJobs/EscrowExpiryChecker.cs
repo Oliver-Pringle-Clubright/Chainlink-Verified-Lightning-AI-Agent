@@ -1,4 +1,5 @@
 using LightningAgent.Core.Interfaces.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -8,14 +9,14 @@ public class EscrowExpiryChecker : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(60);
 
-    private readonly IEscrowManager _escrowManager;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EscrowExpiryChecker> _logger;
 
     public EscrowExpiryChecker(
-        IEscrowManager escrowManager,
+        IServiceScopeFactory scopeFactory,
         ILogger<EscrowExpiryChecker> logger)
     {
-        _escrowManager = escrowManager;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -27,7 +28,10 @@ public class EscrowExpiryChecker : BackgroundService
         {
             try
             {
-                var cancelledCount = await _escrowManager.CheckExpiredEscrowsAsync(stoppingToken);
+                using var scope = _scopeFactory.CreateScope();
+                var escrowManager = scope.ServiceProvider.GetRequiredService<IEscrowManager>();
+
+                var cancelledCount = await escrowManager.CheckExpiredEscrowsAsync(stoppingToken);
 
                 if (cancelledCount > 0)
                 {

@@ -45,9 +45,19 @@ public class MigrationRunner
 
             _logger.LogInformation("Applying migration {Version}: {Description}", migration.Version, migration.Description);
 
-            using var migrationCmd = connection.CreateCommand();
-            migrationCmd.CommandText = migration.Sql;
-            await migrationCmd.ExecuteNonQueryAsync();
+            foreach (var statement in SplitStatements(migration.Sql))
+            {
+                try
+                {
+                    using var migrationCmd = connection.CreateCommand();
+                    migrationCmd.CommandText = statement;
+                    await migrationCmd.ExecuteNonQueryAsync();
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column"))
+                {
+                    _logger.LogDebug("Column already exists, skipping: {Statement}", statement.Trim());
+                }
+            }
 
             using var recordCmd = connection.CreateCommand();
             recordCmd.CommandText = "INSERT INTO __Migrations (Version, Description, AppliedAt) VALUES (@Version, @Description, @AppliedAt)";
@@ -56,6 +66,13 @@ public class MigrationRunner
             recordCmd.Parameters.AddWithValue("@AppliedAt", DateTime.UtcNow.ToString("o"));
             await recordCmd.ExecuteNonQueryAsync();
         }
+    }
+
+    private static IEnumerable<string> SplitStatements(string sql)
+    {
+        return sql.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                  .Where(s => !string.IsNullOrWhiteSpace(s))
+                  .Select(s => s + ";");
     }
 
     private static IEnumerable<(string Version, string Description, string Sql)> GetMigrations()
