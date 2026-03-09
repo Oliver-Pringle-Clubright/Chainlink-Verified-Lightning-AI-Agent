@@ -120,6 +120,35 @@ public class TaskRepository : ITaskRepository
         return results;
     }
 
+    public async Task<int> GetCountAsync(TaskStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Tasks WHERE (@Status IS NULL OR Status = @Status)";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetPagedAsync(int offset, int limit, TaskStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE (@Status IS NULL OR Status = @Status) ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+        cmd.Parameters.AddWithValue("@Limit", limit);
+        cmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
     public async Task<int> CreateAsync(TaskItem task, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

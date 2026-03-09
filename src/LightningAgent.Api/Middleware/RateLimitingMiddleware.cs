@@ -32,12 +32,27 @@ public class RateLimitingMiddleware
             return;
         }
 
-        var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // Determine rate limit key and limit: use per-agent if authenticated, otherwise IP
+        string rateLimitKey;
+        int limit;
+
+        if (context.Items.TryGetValue("AuthenticatedAgentId", out var agentIdObj) && agentIdObj is int agentId)
+        {
+            rateLimitKey = $"agent-{agentId}";
+            limit = context.Items.TryGetValue("AuthenticatedAgentRateLimit", out var rlObj) && rlObj is int rl
+                ? rl
+                : MaxRequestsPerMinute;
+        }
+        else
+        {
+            rateLimitKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            limit = MaxRequestsPerMinute;
+        }
 
         // Periodic cleanup of stale entries
         CleanupStaleEntries();
 
-        var clientInfo = Clients.GetOrAdd(clientIp, _ => new ClientRequestInfo());
+        var clientInfo = Clients.GetOrAdd(rateLimitKey, _ => new ClientRequestInfo());
 
         lock (clientInfo)
         {
@@ -50,11 +65,11 @@ public class RateLimitingMiddleware
                 clientInfo.RequestTimestamps.Dequeue();
             }
 
-            if (clientInfo.RequestTimestamps.Count >= MaxRequestsPerMinute)
+            if (clientInfo.RequestTimestamps.Count >= limit)
             {
                 _logger.LogWarning(
-                    "Rate limit exceeded for client {ClientIp} ({Count} requests in window)",
-                    clientIp, clientInfo.RequestTimestamps.Count);
+                    "Rate limit exceeded for client {ClientKey} ({Count} requests in window, limit {Limit})",
+                    rateLimitKey, clientInfo.RequestTimestamps.Count, limit);
 
                 context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 context.Response.ContentType = "application/problem+json";
@@ -66,7 +81,7 @@ public class RateLimitingMiddleware
                     type = "https://tools.ietf.org/html/rfc6585#section-4",
                     title = "Too Many Requests",
                     status = 429,
-                    detail = $"Rate limit of {MaxRequestsPerMinute} requests per minute exceeded.",
+                    detail = $"Rate limit of {limit} requests per minute exceeded.",
                     traceId = context.TraceIdentifier
                 };
 

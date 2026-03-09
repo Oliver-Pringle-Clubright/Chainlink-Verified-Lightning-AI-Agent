@@ -20,7 +20,8 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(settings.LndRestUrl);
         })
         .ConfigurePrimaryHttpMessageHandler(() => LndTlsCertHandler.CreateHttpClientHandler(settings.TlsCertPath))
-        .AddHttpMessageHandler<LndMacaroonHandler>();
+        .AddHttpMessageHandler<LndMacaroonHandler>()
+        .AddStandardResilienceHandler();
 
         return services;
     }

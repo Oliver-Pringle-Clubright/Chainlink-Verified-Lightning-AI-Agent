@@ -14,6 +14,7 @@ public class EscrowManager : IEscrowManager
     private readonly ILightningClient _lightning;
     private readonly IEscrowRepository _escrowRepo;
     private readonly IMilestoneRepository _milestoneRepo;
+    private readonly IEventPublisher _eventPublisher;
     private readonly EscrowSettings _settings;
     private readonly ILogger<EscrowManager> _logger;
 
@@ -21,12 +22,14 @@ public class EscrowManager : IEscrowManager
         ILightningClient lightning,
         IEscrowRepository escrowRepo,
         IMilestoneRepository milestoneRepo,
+        IEventPublisher eventPublisher,
         IOptions<EscrowSettings> settings,
         ILogger<EscrowManager> logger)
     {
         _lightning = lightning;
         _escrowRepo = escrowRepo;
         _milestoneRepo = milestoneRepo;
+        _eventPublisher = eventPublisher;
         _settings = settings.Value;
         _logger = logger;
     }
@@ -115,6 +118,9 @@ public class EscrowManager : IEscrowManager
         await _escrowRepo.UpdateAsync(escrow, ct);
 
         _logger.LogInformation("Escrow {EscrowId} settled successfully", escrowId);
+
+        await _eventPublisher.PublishEscrowSettledAsync(escrow.Id, escrow.MilestoneId, escrow.AmountSats, ct);
+
         return true;
     }
 

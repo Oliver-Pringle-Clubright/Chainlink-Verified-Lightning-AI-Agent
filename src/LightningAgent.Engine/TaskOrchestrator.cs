@@ -17,6 +17,7 @@ public class TaskOrchestrator : ITaskOrchestrator
     private readonly IPaymentService _paymentService;
     private readonly IReputationService _reputationService;
     private readonly ISpendLimitService _spendLimitService;
+    private readonly IEventPublisher _eventPublisher;
     private readonly DeliverableAssembler _assembler;
     private readonly ITaskRepository _taskRepo;
     private readonly IMilestoneRepository _milestoneRepo;
@@ -31,6 +32,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         IPaymentService paymentService,
         IReputationService reputationService,
         ISpendLimitService spendLimitService,
+        IEventPublisher eventPublisher,
         DeliverableAssembler assembler,
         ITaskRepository taskRepo,
         IMilestoneRepository milestoneRepo,
@@ -44,6 +46,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         _paymentService = paymentService;
         _reputationService = reputationService;
         _spendLimitService = spendLimitService;
+        _eventPublisher = eventPublisher;
         _assembler = assembler;
         _taskRepo = taskRepo;
         _milestoneRepo = milestoneRepo;
@@ -121,6 +124,8 @@ public class TaskOrchestrator : ITaskOrchestrator
                     "Assigned agent {AgentId} to subtask {SubtaskId} '{Title}'",
                     bestAgent.Id, subtask.Id, subtask.Title);
 
+                await _eventPublisher.PublishTaskAssignedAsync(subtask.Id, bestAgent.Id, ct);
+
                 // d. Create escrow for each milestone of this subtask
                 var milestones = await _milestoneRepo.GetByTaskIdAsync(subtask.Id, ct);
                 foreach (var milestone in milestones)
@@ -146,14 +151,10 @@ public class TaskOrchestrator : ITaskOrchestrator
             }
         }
 
-        // 4. Update task status to Completed
-        task.Status = TaskStatus.Completed;
-        task.CompletedAt = DateTime.UtcNow;
-        task.UpdatedAt = DateTime.UtcNow;
-        await _taskRepo.UpdateStatusAsync(task.Id, TaskStatus.Completed, ct);
-
+        // 4. Task stays InProgress — it will be completed when all milestones pass verification
         _logger.LogInformation(
-            "Orchestration completed for task {TaskId} with {SubtaskCount} subtasks",
+            "Orchestration setup completed for task {TaskId} with {SubtaskCount} subtasks. " +
+            "Task remains InProgress until milestones are verified.",
             task.Id, subtasks.Count);
 
         return task;
@@ -203,6 +204,121 @@ public class TaskOrchestrator : ITaskOrchestrator
             taskId, subtaskOutputs.Count);
 
         return assembled;
+    }
+
+    public async Task<bool> CheckAndCompleteTaskAsync(int taskId, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Checking completion status for task {TaskId}", taskId);
+
+        var task = await _taskRepo.GetByIdAsync(taskId, ct);
+        if (task is null)
+        {
+            _logger.LogWarning("Task {TaskId} not found during completion check", taskId);
+            return false;
+        }
+
+        // Already in a terminal state
+        if (task.Status is TaskStatus.Completed or TaskStatus.Failed)
+        {
+            return true;
+        }
+
+        // Collect all milestones for this task and its subtasks
+        var allMilestones = new List<Milestone>();
+
+        // Direct milestones on the task itself
+        var taskMilestones = await _milestoneRepo.GetByTaskIdAsync(taskId, ct);
+        allMilestones.AddRange(taskMilestones);
+
+        // Milestones on subtasks
+        var subtasks = await _taskRepo.GetSubtasksAsync(taskId, ct);
+        foreach (var subtask in subtasks)
+        {
+            var subtaskMilestones = await _milestoneRepo.GetByTaskIdAsync(subtask.Id, ct);
+            allMilestones.AddRange(subtaskMilestones);
+        }
+
+        if (allMilestones.Count == 0)
+        {
+            _logger.LogWarning("No milestones found for task {TaskId}", taskId);
+            return false;
+        }
+
+        bool allPassed = allMilestones.All(m => m.Status == Core.Enums.MilestoneStatus.Passed);
+        bool anyFailed = allMilestones.Any(m => m.Status == Core.Enums.MilestoneStatus.Failed);
+
+        if (allPassed)
+        {
+            _logger.LogInformation(
+                "All {Count} milestones passed for task {TaskId}. Marking as Completed.",
+                allMilestones.Count, taskId);
+
+            task.Status = TaskStatus.Completed;
+            task.CompletedAt = DateTime.UtcNow;
+            task.UpdatedAt = DateTime.UtcNow;
+            await _taskRepo.UpdateStatusAsync(task.Id, TaskStatus.Completed, ct);
+
+            // Also mark subtasks as completed
+            foreach (var subtask in subtasks)
+            {
+                var stMilestones = await _milestoneRepo.GetByTaskIdAsync(subtask.Id, ct);
+                if (stMilestones.All(m => m.Status == Core.Enums.MilestoneStatus.Passed))
+                {
+                    await _taskRepo.UpdateStatusAsync(subtask.Id, TaskStatus.Completed, ct);
+                }
+            }
+
+            // Assemble final deliverable
+            try
+            {
+                await AssembleDeliverableAsync(taskId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to assemble deliverable for task {TaskId}", taskId);
+            }
+
+            return true;
+        }
+
+        if (anyFailed)
+        {
+            // Check if any failed milestones still have no retries left
+            // (if milestone is Failed, it means verification failed and was not retried)
+            bool allFailedAreTerminal = allMilestones
+                .Where(m => m.Status == Core.Enums.MilestoneStatus.Failed)
+                .All(_ => true); // Failed milestones without retry are terminal
+
+            // If there are still pending/in-progress milestones, the task is not terminal yet
+            bool hasActiveMilestones = allMilestones.Any(m =>
+                m.Status is Core.Enums.MilestoneStatus.Pending
+                    or Core.Enums.MilestoneStatus.InProgress
+                    or Core.Enums.MilestoneStatus.Verifying);
+
+            if (!hasActiveMilestones && allFailedAreTerminal)
+            {
+                _logger.LogInformation(
+                    "Task {TaskId} has failed milestones with no active work remaining. Marking as Failed.",
+                    taskId);
+
+                task.Status = TaskStatus.Failed;
+                task.UpdatedAt = DateTime.UtcNow;
+                await _taskRepo.UpdateStatusAsync(task.Id, TaskStatus.Failed, ct);
+
+                return true;
+            }
+        }
+
+        _logger.LogDebug(
+            "Task {TaskId} not yet terminal. Milestones: {Passed} passed, {Failed} failed, {Other} pending/active.",
+            taskId,
+            allMilestones.Count(m => m.Status == Core.Enums.MilestoneStatus.Passed),
+            allMilestones.Count(m => m.Status == Core.Enums.MilestoneStatus.Failed),
+            allMilestones.Count(m => m.Status is Core.Enums.MilestoneStatus.Pending
+                or Core.Enums.MilestoneStatus.InProgress
+                or Core.Enums.MilestoneStatus.Verifying));
+
+        return false;
     }
 
     /// <summary>

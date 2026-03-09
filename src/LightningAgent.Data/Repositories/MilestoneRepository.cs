@@ -119,6 +119,31 @@ public class MilestoneRepository : IMilestoneRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public async Task<IReadOnlyList<Milestone>> GetCompletedByAgentAsync(int agentId, int limit = 10, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT m.Id, m.TaskId, m.SequenceNumber, m.Title, m.Description, m.VerificationCriteria,
+                   m.PayoutSats, m.Status, m.VerificationResult, m.InvoicePaymentHash, m.CreatedAt, m.VerifiedAt, m.PaidAt
+            FROM Milestones m
+            INNER JOIN Tasks t ON m.TaskId = t.Id
+            WHERE t.AssignedAgentId = @AgentId AND m.Status = @Status
+            ORDER BY m.VerifiedAt DESC
+            LIMIT @Limit";
+        cmd.Parameters.AddWithValue("@AgentId", agentId);
+        cmd.Parameters.AddWithValue("@Status", MilestoneStatus.Passed.ToString());
+        cmd.Parameters.AddWithValue("@Limit", limit);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<Milestone>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapMilestone(reader));
+        }
+        return results;
+    }
+
     public async Task DeleteAsync(int id)
     {
         using var connection = _connectionFactory.CreateConnection();

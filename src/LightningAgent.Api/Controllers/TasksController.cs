@@ -3,7 +3,9 @@ using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
+using LightningAgent.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
@@ -80,7 +82,19 @@ public class TasksController : ControllerBase
             UpdatedAt = now
         };
 
-        var id = await _taskRepository.CreateAsync(task, ct);
+        int id;
+        try
+        {
+            id = await _taskRepository.CreateAsync(task, ct);
+        }
+        catch (SqliteException ex) when (SqliteExceptionHandler.IsUniqueConstraintViolation(ex))
+        {
+            return Conflict("A task with the same ExternalId already exists.");
+        }
+        catch (SqliteException ex) when (SqliteExceptionHandler.IsForeignKeyViolation(ex))
+        {
+            return BadRequest("Invalid foreign key reference in task data.");
+        }
 
         _logger.LogInformation("Created task {TaskId} (ext: {ExternalId})", id, externalId);
 
@@ -94,36 +108,57 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<TaskDetailResponse>>> ListTasks(
+    public async Task<ActionResult<PaginatedResponse<TaskDetailResponse>>> ListTasks(
         [FromQuery] string? status,
         [FromQuery] int? agentId,
         [FromQuery] string? clientId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
-        IReadOnlyList<TaskItem> tasks;
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100;
 
+        // When agentId or clientId filters are specified, fall back to in-memory pagination
+        if (agentId.HasValue)
+        {
+            var agentTasks = await _taskRepository.GetByAssignedAgentAsync(agentId.Value, ct);
+            if (!string.IsNullOrEmpty(clientId))
+                agentTasks = agentTasks.Where(t => t.ClientId == clientId).ToList();
+            var total = agentTasks.Count;
+            var items = agentTasks.Skip((page - 1) * pageSize).Take(pageSize).Select(MapToDetailResponse).ToList();
+            return Ok(new PaginatedResponse<TaskDetailResponse>
+            {
+                Items = items, Page = page, PageSize = pageSize, TotalCount = total
+            });
+        }
+
+        TaskStatus? statusFilter = null;
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<TaskStatus>(status, ignoreCase: true, out var parsedStatus))
         {
-            tasks = await _taskRepository.GetByStatusAsync(parsedStatus, ct);
-        }
-        else if (agentId.HasValue)
-        {
-            tasks = await _taskRepository.GetByAssignedAgentAsync(agentId.Value, ct);
-        }
-        else
-        {
-            // Return all pending tasks as a sensible default
-            tasks = await _taskRepository.GetByStatusAsync(TaskStatus.Pending, ct);
+            statusFilter = parsedStatus;
         }
 
-        // If clientId filter is specified, apply it in memory
+        var offset = (page - 1) * pageSize;
+        var totalCount = await _taskRepository.GetCountAsync(statusFilter, ct);
+        var tasks = await _taskRepository.GetPagedAsync(offset, pageSize, statusFilter, ct);
+
+        // If clientId filter is specified, apply it in memory (reduces count accuracy but keeps simplicity)
+        IEnumerable<TaskItem> filtered = tasks;
         if (!string.IsNullOrEmpty(clientId))
         {
-            tasks = tasks.Where(t => t.ClientId == clientId).ToList();
+            filtered = tasks.Where(t => t.ClientId == clientId);
         }
 
-        var result = tasks.Select(MapToDetailResponse).ToList();
-        return Ok(result);
+        var result = filtered.Select(MapToDetailResponse).ToList();
+        return Ok(new PaginatedResponse<TaskDetailResponse>
+        {
+            Items = result,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        });
     }
 
     [HttpGet("{id:int}")]
@@ -156,6 +191,9 @@ public class TasksController : ControllerBase
         [FromBody] AssignAgentBody body,
         CancellationToken ct)
     {
+        if (body.AgentId <= 0)
+            return BadRequest("AgentId must be greater than zero.");
+
         var task = await _taskRepository.GetByIdAsync(id, ct);
         if (task is null)
             return NotFound($"Task {id} not found.");

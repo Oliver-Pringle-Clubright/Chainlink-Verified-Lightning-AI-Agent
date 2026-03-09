@@ -21,12 +21,14 @@
 | API Docs | Swagger / OpenAPI | Swashbuckle.AspNetCore 7.x |
 | Testing | xUnit | 2.9.3 + Microsoft.NET.Test.Sdk 17.14.1 |
 | Coverage | Coverlet | 6.0.4 |
+| Resilience | Polly (via Microsoft.Extensions.Http.Resilience) | 10.0.0-preview |
+| Containerization | Docker | Multi-stage build (.NET 10 SDK + ASP.NET runtime) |
 
 ---
 
 ## 2. Database Schema
 
-The database is SQLite, initialized on application startup by `DatabaseInitializer.InitializeAsync()`. All 14 tables are defined below in the exact DDL used at runtime.
+The database is SQLite, initialized on application startup by `DatabaseInitializer.InitializeAsync()`. All 15 tables are defined below in the exact DDL used at runtime.
 
 ### 2.1 Agents
 
@@ -40,8 +42,13 @@ CREATE TABLE IF NOT EXISTS Agents (
     DailySpendCapSats INTEGER NOT NULL DEFAULT 0,
     WeeklySpendCapSats INTEGER NOT NULL DEFAULT 0,
     CreatedAt         TEXT    NOT NULL,
-    UpdatedAt         TEXT    NOT NULL
+    UpdatedAt         TEXT    NOT NULL,
+    WebhookUrl        TEXT,
+    ApiKeyHash        TEXT,
+    RateLimitPerMinute INTEGER NOT NULL DEFAULT 100
 );
+
+CREATE INDEX IF NOT EXISTS IX_Agents_ApiKeyHash ON Agents(ApiKeyHash);
 ```
 
 **Status values:** `Active`, `Suspended`, `Banned`
@@ -292,11 +299,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS IX_VerStrat_Type_Param
     ON VerificationStrategyConfig(StrategyType, ParameterName);
 ```
 
+### 2.14 __Migrations
+
+```sql
+CREATE TABLE IF NOT EXISTS __Migrations (
+    Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    Version   TEXT NOT NULL,
+    Name      TEXT NOT NULL,
+    AppliedAt TEXT NOT NULL
+);
+```
+
 ---
 
 ## 3. API Reference
 
-All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `RateLimitingMiddleware` (100 req/min per IP), `ApiKeyAuthMiddleware` (header `X-Api-Key`, skipped for `/api/health` and `/swagger`).
+All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `CorrelationIdMiddleware` (reads/generates `X-Correlation-Id`), `ApiKeyAuthMiddleware` (multi-tenant: global key or per-agent SHA256-hashed key, skipped for `/api/health` and `/swagger`), `RateLimitingMiddleware` (per-agent rate from DB, fallback 100 req/min per IP).
 
 ### 3.1 Tasks API
 
@@ -923,6 +941,33 @@ Two implementations exist (controller + minimal API route). The controller versi
 
 ---
 
+### 3.10 Stats API
+
+#### `GET /api/stats` -- Marketplace Dashboard
+
+Returns aggregate statistics for the entire marketplace.
+
+**Response:**
+```json
+{
+  "totalAgents": 42,
+  "activeAgents": 38,
+  "totalTasks": 156,
+  "pendingTasks": 12,
+  "completedTasks": 130,
+  "totalPaymentsSats": 4500000,
+  "activeEscrows": 8,
+  "totalVerifications": 245,
+  "openDisputes": 3,
+  "btcUsdPrice": 97432.15,
+  "uptimeSeconds": 86400
+}
+```
+
+**Status Codes:** `200 OK`
+
+---
+
 ## 4. Configuration Reference
 
 Configuration is read from `appsettings.json` (and environment-specific overrides) and bound to strongly-typed settings classes via `IOptions<T>`.
@@ -1028,7 +1073,18 @@ Configuration is read from `appsettings.json` (and environment-specific override
 | `DefaultWeeklyCapSats` | long | `5000000` | Default weekly spend cap per agent (5M sats) |
 | `DefaultPerTaskMaxSats` | long | `500000` | Default max spend per individual task (500K sats) |
 
-### 4.10 ApiSecurity
+### 4.10 WorkerAgent
+
+**Settings class:** `LightningAgent.Core.Configuration.WorkerAgentSettings`
+**Config path:** `WorkerAgent`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Enabled` | bool | `true` | Enable/disable the autonomous worker agent background service |
+| `PollingIntervalSeconds` | int | `30` | How often the worker agent polls for new assigned tasks |
+| `MaxTasksPerBatch` | int | `5` | Maximum number of tasks to process per polling cycle |
+
+### 4.11 ApiSecurity
 
 Read directly from `IConfiguration` (no strongly-typed settings class).
 
@@ -1052,7 +1108,7 @@ Overall milestone pass logic: **all strategies pass** OR **average score >= 0.7*
 | **CodeCompile** | Deterministic | `Code` only | `taskType == TaskType.Code` | Checks for recognizable code structure keywords (+0.4), balanced braces/parens/brackets (+0.3), and absence of obvious syntax errors (+0.3). Passes at score >= 0.7. |
 | **SchemaValidation** | Deterministic | `Data` only | `taskType == TaskType.Data` | Validates output is valid JSON (+0.5), then checks for `expectedFields` listed in verification criteria (+0.5 proportional to fields found). Passes at score >= 0.7. |
 | **TextSimilarity** | Hybrid | `Text` only | `taskType == TaskType.Text` | Checks minimum length >= 50 chars (+0.3), non-empty (+0.2), keyword presence from criteria (+0.3 proportional), sentence count >= 3 (+0.2). Passes at score >= 0.7. |
-| **ClipScore** | External (Stub) | `Image` only | `taskType == TaskType.Image` | Stub implementation. Returns score 0.85 if output bytes are non-empty, 0.0 otherwise. In production, would call a CLIP scoring API to compare image against description. |
+| **ClipScore** | External (Stub) | `Image` only | `taskType == TaskType.Image` | Stub implementation. Returns score `0.7` with `Passed = false` and a message indicating CLIP scoring is not yet configured. In production, would call a CLIP scoring API to compare image against description. |
 
 ### Verification Criteria Format
 
@@ -1210,6 +1266,7 @@ All background services extend `BackgroundService` and run as hosted services re
 | **ChainlinkResponsePoller** | `LightningAgent.Engine.BackgroundJobs.ChainlinkResponsePoller` | 30 seconds | Queries `IVerificationRepository.GetPendingChainlinkAsync()` for verifications awaiting Chainlink Functions responses, calls `IChainlinkFunctionsClient.GetResponseAsync()`, and updates the verification with the score, pass/fail result, and transaction hash. |
 | **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF, uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Logs warnings for anomaly scores > 0.7. |
 | **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Calls `IPricingService.GetBtcUsdPriceAsync()` which fetches the latest BTC/USD price from the Chainlink price feed oracle and caches it in the `PriceCache` table. |
+| **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch). |
 
 All services use graceful shutdown: they catch `OperationCanceledException` when the `stoppingToken` is cancelled and exit cleanly. Services that require scoped dependencies (repositories, clients) create a scope via `IServiceScopeFactory`.
 
@@ -1230,11 +1287,13 @@ All services use graceful shutdown: they catch `OperationCanceledException` when
 | Package | Version |
 |---------|---------|
 | `Microsoft.Data.Sqlite` | 10.0.0-preview.* |
+| `Microsoft.Extensions.Logging.Abstractions` | 10.0.0-preview.* |
 
 #### LightningAgent.Lightning
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
+| `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
 #### LightningAgent.Chainlink
 | Package | Version |
@@ -1246,11 +1305,13 @@ All services use graceful shutdown: they catch `OperationCanceledException` when
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
+| `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
 #### LightningAgent.AI
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
+| `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
 #### LightningAgent.Verification
 *(No direct NuGet packages -- depends on project references only)*

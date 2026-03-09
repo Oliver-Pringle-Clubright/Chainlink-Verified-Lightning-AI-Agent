@@ -1,0 +1,97 @@
+namespace LightningAgent.Api.Services;
+
+using Microsoft.AspNetCore.SignalR;
+using LightningAgent.Api.Hubs;
+using LightningAgent.Core.Events;
+using LightningAgent.Core.Interfaces.Services;
+using LightningAgent.Engine;
+
+public class SignalREventPublisher : IEventPublisher
+{
+    private readonly IHubContext<AgentNotificationHub> _hub;
+    private readonly WebhookDeliveryService _webhookDelivery;
+    private readonly ILogger<SignalREventPublisher> _logger;
+
+    public SignalREventPublisher(
+        IHubContext<AgentNotificationHub> hub,
+        WebhookDeliveryService webhookDelivery,
+        ILogger<SignalREventPublisher> logger)
+    {
+        _hub = hub;
+        _webhookDelivery = webhookDelivery;
+        _logger = logger;
+    }
+
+    public async Task PublishTaskAssignedAsync(int taskId, int agentId, CancellationToken ct = default)
+    {
+        var evt = new TaskAssignedEvent(taskId, agentId, DateTime.UtcNow);
+        _logger.LogInformation("Publishing TaskAssigned event: Task {TaskId} -> Agent {AgentId}", taskId, agentId);
+
+        await _hub.Clients.All.SendAsync("TaskAssigned", evt, ct);
+        await _hub.Clients.Group($"agent-{agentId}").SendAsync("TaskAssigned", evt, ct);
+        await _webhookDelivery.DeliverAsync(agentId, "TaskAssigned", evt, ct);
+    }
+
+    public async Task PublishMilestoneVerifiedAsync(int milestoneId, int taskId, bool passed, double score, CancellationToken ct = default)
+    {
+        var evt = new MilestoneVerifiedEvent(milestoneId, taskId, passed, score, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing MilestoneVerified event: Milestone {MilestoneId} Task {TaskId} Passed={Passed} Score={Score:F3}",
+            milestoneId, taskId, passed, score);
+
+        await _hub.Clients.All.SendAsync("MilestoneVerified", evt, ct);
+    }
+
+    public async Task PublishPaymentSentAsync(int paymentId, int agentId, long amountSats, CancellationToken ct = default)
+    {
+        var evt = new PaymentSentEvent(paymentId, agentId, amountSats, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing PaymentSent event: Payment {PaymentId} Agent {AgentId} Amount {AmountSats} sats",
+            paymentId, agentId, amountSats);
+
+        await _hub.Clients.All.SendAsync("PaymentSent", evt, ct);
+        await _hub.Clients.Group($"agent-{agentId}").SendAsync("PaymentSent", evt, ct);
+        await _webhookDelivery.DeliverAsync(agentId, "PaymentSent", evt, ct);
+    }
+
+    public async Task PublishDisputeOpenedAsync(int disputeId, int taskId, string reason, CancellationToken ct = default)
+    {
+        var evt = new DisputeOpenedEvent(disputeId, taskId, reason, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing DisputeOpened event: Dispute {DisputeId} Task {TaskId}",
+            disputeId, taskId);
+
+        await _hub.Clients.All.SendAsync("DisputeOpened", evt, ct);
+    }
+
+    public async Task PublishEscrowSettledAsync(int escrowId, int milestoneId, long amountSats, CancellationToken ct = default)
+    {
+        var evt = new EscrowSettledEvent(escrowId, milestoneId, amountSats, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing EscrowSettled event: Escrow {EscrowId} Milestone {MilestoneId} Amount {AmountSats} sats",
+            escrowId, milestoneId, amountSats);
+
+        await _hub.Clients.All.SendAsync("EscrowSettled", evt, ct);
+    }
+
+    public async Task PublishVerificationFailedAsync(int milestoneId, int taskId, string reason, CancellationToken ct = default)
+    {
+        var evt = new VerificationFailedEvent(milestoneId, taskId, reason, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing VerificationFailed event: Milestone {MilestoneId} Task {TaskId}",
+            milestoneId, taskId);
+
+        await _hub.Clients.All.SendAsync("VerificationFailed", evt, ct);
+    }
+
+    public async Task PublishAgentRegisteredAsync(int agentId, string name, CancellationToken ct = default)
+    {
+        var evt = new AgentRegisteredEvent(agentId, name, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing AgentRegistered event: Agent {AgentId} Name {Name}",
+            agentId, name);
+
+        await _hub.Clients.All.SendAsync("AgentRegistered", evt, ct);
+        await _webhookDelivery.DeliverAsync(agentId, "AgentRegistered", evt, ct);
+    }
+}

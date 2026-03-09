@@ -15,6 +15,7 @@ public class DisputeResolver : IDisputeResolver
     private readonly IAgentMatcher _agentMatcher;
     private readonly IEscrowManager _escrowManager;
     private readonly IReputationService _reputationService;
+    private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<DisputeResolver> _logger;
 
     public DisputeResolver(
@@ -22,12 +23,14 @@ public class DisputeResolver : IDisputeResolver
         IAgentMatcher agentMatcher,
         IEscrowManager escrowManager,
         IReputationService reputationService,
+        IEventPublisher eventPublisher,
         ILogger<DisputeResolver> logger)
     {
         _disputeRepo = disputeRepo;
         _agentMatcher = agentMatcher;
         _escrowManager = escrowManager;
         _reputationService = reputationService;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -57,6 +60,8 @@ public class DisputeResolver : IDisputeResolver
         _logger.LogInformation(
             "Dispute {DisputeId} opened for task {TaskId} (milestone={MilestoneId}) by {InitiatedBy} {InitiatorId}: {Reason}. Amount: {AmountSats} sats",
             dispute.Id, taskId, milestoneId, initiatedBy, initiatorId, reason, amountSats);
+
+        await _eventPublisher.PublishDisputeOpenedAsync(dispute.Id, taskId, reason, ct);
 
         return dispute;
     }

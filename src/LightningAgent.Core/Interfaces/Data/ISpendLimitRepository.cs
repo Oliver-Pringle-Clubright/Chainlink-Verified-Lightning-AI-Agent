@@ -8,4 +8,5 @@ public interface ISpendLimitRepository
     Task<SpendLimit?> GetByTaskIdAsync(int taskId, CancellationToken ct = default);
     Task<int> CreateAsync(SpendLimit limit, CancellationToken ct = default);
     Task UpdateAsync(SpendLimit limit, CancellationToken ct = default);
+    Task<IReadOnlyList<SpendLimit>> GetExpiredAsync(CancellationToken ct = default);
 }

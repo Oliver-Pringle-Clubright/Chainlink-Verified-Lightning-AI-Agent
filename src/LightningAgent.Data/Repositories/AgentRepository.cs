@@ -18,7 +18,7 @@ public class AgentRepository : IAgentRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt FROM Agents WHERE Id = @Id";
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", id);
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -29,7 +29,7 @@ public class AgentRepository : IAgentRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt FROM Agents WHERE ExternalId = @ExternalId";
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE ExternalId = @ExternalId";
         cmd.Parameters.AddWithValue("@ExternalId", externalId);
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -42,12 +42,12 @@ public class AgentRepository : IAgentRepository
         using var cmd = connection.CreateCommand();
         if (status.HasValue)
         {
-            cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt FROM Agents WHERE Status = @Status";
+            cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE Status = @Status";
             cmd.Parameters.AddWithValue("@Status", status.Value.ToString());
         }
         else
         {
-            cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt FROM Agents";
+            cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents";
         }
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -63,7 +63,7 @@ public class AgentRepository : IAgentRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt FROM Agents WHERE Status = @Status";
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE Status = @Status";
         cmd.Parameters.AddWithValue("@Status", status.ToString());
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -75,12 +75,41 @@ public class AgentRepository : IAgentRepository
         return results;
     }
 
+    public async Task<int> GetCountAsync(AgentStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Agents WHERE (@Status IS NULL OR Status = @Status)";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<Agent>> GetPagedAsync(int offset, int limit, AgentStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE (@Status IS NULL OR Status = @Status) ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+        cmd.Parameters.AddWithValue("@Limit", limit);
+        cmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<Agent>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapAgent(reader));
+        }
+        return results;
+    }
+
     public async Task<int> CreateAsync(Agent agent, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"INSERT INTO Agents (ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, CreatedAt, UpdatedAt)
-            VALUES (@ExternalId, @Name, @WalletPubkey, @Status, @DailySpendCapSats, @WeeklySpendCapSats, @CreatedAt, @UpdatedAt);
+        cmd.CommandText = @"INSERT INTO Agents (ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt)
+            VALUES (@ExternalId, @Name, @WalletPubkey, @Status, @DailySpendCapSats, @WeeklySpendCapSats, @WebhookUrl, @ApiKeyHash, @RateLimitPerMinute, @CreatedAt, @UpdatedAt);
             SELECT last_insert_rowid();";
         cmd.Parameters.AddWithValue("@ExternalId", agent.ExternalId);
         cmd.Parameters.AddWithValue("@Name", agent.Name);
@@ -88,6 +117,9 @@ public class AgentRepository : IAgentRepository
         cmd.Parameters.AddWithValue("@Status", agent.Status.ToString());
         cmd.Parameters.AddWithValue("@DailySpendCapSats", agent.DailySpendCapSats);
         cmd.Parameters.AddWithValue("@WeeklySpendCapSats", agent.WeeklySpendCapSats);
+        cmd.Parameters.AddWithValue("@WebhookUrl", (object?)agent.WebhookUrl ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ApiKeyHash", (object?)agent.ApiKeyHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RateLimitPerMinute", agent.RateLimitPerMinute);
         cmd.Parameters.AddWithValue("@CreatedAt", agent.CreatedAt.ToString("o"));
         cmd.Parameters.AddWithValue("@UpdatedAt", agent.UpdatedAt.ToString("o"));
 
@@ -101,6 +133,7 @@ public class AgentRepository : IAgentRepository
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"UPDATE Agents SET ExternalId = @ExternalId, Name = @Name, WalletPubkey = @WalletPubkey,
             Status = @Status, DailySpendCapSats = @DailySpendCapSats, WeeklySpendCapSats = @WeeklySpendCapSats,
+            WebhookUrl = @WebhookUrl, ApiKeyHash = @ApiKeyHash, RateLimitPerMinute = @RateLimitPerMinute,
             UpdatedAt = @UpdatedAt WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", agent.Id);
         cmd.Parameters.AddWithValue("@ExternalId", agent.ExternalId);
@@ -109,6 +142,9 @@ public class AgentRepository : IAgentRepository
         cmd.Parameters.AddWithValue("@Status", agent.Status.ToString());
         cmd.Parameters.AddWithValue("@DailySpendCapSats", agent.DailySpendCapSats);
         cmd.Parameters.AddWithValue("@WeeklySpendCapSats", agent.WeeklySpendCapSats);
+        cmd.Parameters.AddWithValue("@WebhookUrl", (object?)agent.WebhookUrl ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ApiKeyHash", (object?)agent.ApiKeyHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RateLimitPerMinute", agent.RateLimitPerMinute);
         cmd.Parameters.AddWithValue("@UpdatedAt", agent.UpdatedAt.ToString("o"));
 
         await cmd.ExecuteNonQueryAsync();
@@ -124,6 +160,17 @@ public class AgentRepository : IAgentRepository
         cmd.Parameters.AddWithValue("@UpdatedAt", DateTime.UtcNow.ToString("o"));
 
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<Agent?> GetByApiKeyHashAsync(string apiKeyHash, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE ApiKeyHash = @ApiKeyHash";
+        cmd.Parameters.AddWithValue("@ApiKeyHash", apiKeyHash);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? MapAgentFull(reader) : null;
     }
 
     public async Task DeleteAsync(int id)
@@ -147,8 +194,16 @@ public class AgentRepository : IAgentRepository
             Status = Enum.Parse<AgentStatus>(reader.GetString(4)),
             DailySpendCapSats = reader.GetInt64(5),
             WeeklySpendCapSats = reader.GetInt64(6),
-            CreatedAt = DateTime.Parse(reader.GetString(7)),
-            UpdatedAt = DateTime.Parse(reader.GetString(8))
+            WebhookUrl = reader.IsDBNull(7) ? null : reader.GetString(7),
+            ApiKeyHash = reader.IsDBNull(8) ? null : reader.GetString(8),
+            RateLimitPerMinute = reader.GetInt32(9),
+            CreatedAt = DateTime.Parse(reader.GetString(10)),
+            UpdatedAt = DateTime.Parse(reader.GetString(11))
         };
+    }
+
+    private static Agent MapAgentFull(SqliteDataReader reader)
+    {
+        return MapAgent(reader);
     }
 }

@@ -90,47 +90,38 @@ public class SpendLimitService : ISpendLimitService
 
     public async Task<int> ResetExpiredPeriodsAsync(CancellationToken ct = default)
     {
-        // The repository does not expose a GetAll method, so we iterate
-        // over agent-based limits by probing known agent IDs. In a production
-        // system this would be a single SQL query. For now we rely on the
-        // caller (the background job) to invoke this periodically; if no
-        // agents are known we return 0.
-        //
-        // We use a pragmatic approach: try agent IDs 1..10000.  The repo
-        // returns null for non-existent agents so this is safe, just
-        // potentially slow.  A future migration should add GetAllAsync to the
-        // repository interface.
+        var expiredLimits = await _spendLimitRepo.GetExpiredAsync(ct);
+
+        if (expiredLimits.Count == 0)
+        {
+            _logger.LogDebug("No expired spend limits found");
+            return 0;
+        }
+
+        _logger.LogInformation("Found {Count} expired spend limits to reset", expiredLimits.Count);
 
         int resetCount = 0;
         var now = DateTime.UtcNow;
 
-        // Probe a reasonable range of agent IDs.  In practice, the hosting
-        // project should register a proper ISpendLimitRepository.GetAllAsync.
-        for (int agentId = 1; agentId <= 10_000; agentId++)
+        foreach (var limit in expiredLimits)
         {
             if (ct.IsCancellationRequested) break;
 
-            var limit = await _spendLimitRepo.GetByAgentIdAsync(agentId, ct);
-            if (limit is null) continue;
-
-            if (limit.PeriodEnd <= now)
+            limit.CurrentSpentSats = 0;
+            limit.PeriodStart = now;
+            limit.PeriodEnd = limit.LimitType switch
             {
-                limit.CurrentSpentSats = 0;
-                limit.PeriodStart = now;
-                limit.PeriodEnd = limit.LimitType switch
-                {
-                    "Daily" => now.AddDays(1),
-                    "Weekly" => now.AddDays(7),
-                    _ => now.AddDays(1) // Default to daily
-                };
+                "Daily" => now.AddDays(1),
+                "Weekly" => now.AddDays(7),
+                _ => now.AddDays(1) // Default to daily
+            };
 
-                await _spendLimitRepo.UpdateAsync(limit, ct);
-                resetCount++;
+            await _spendLimitRepo.UpdateAsync(limit, ct);
+            resetCount++;
 
-                _logger.LogInformation(
-                    "Reset expired {LimitType} spend limit for agent {AgentId}: new period {Start} - {End}",
-                    limit.LimitType, agentId, limit.PeriodStart, limit.PeriodEnd);
-            }
+            _logger.LogInformation(
+                "Reset expired {LimitType} spend limit for agent {AgentId}: new period {Start} - {End}",
+                limit.LimitType, limit.AgentId, limit.PeriodStart, limit.PeriodEnd);
         }
 
         return resetCount;

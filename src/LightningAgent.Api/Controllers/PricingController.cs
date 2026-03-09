@@ -1,4 +1,5 @@
 using LightningAgent.Api.DTOs;
+using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using Microsoft.AspNetCore.Mvc;
 
@@ -53,6 +54,8 @@ public class PricingController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.TaskType))
             return BadRequest("TaskType is required.");
+        if (!Enum.TryParse<TaskType>(request.TaskType, ignoreCase: true, out _))
+            return BadRequest($"Invalid TaskType '{request.TaskType}'. Valid values: {string.Join(", ", Enum.GetNames<TaskType>())}");
 
         var latest = await _priceCacheRepository.GetLatestAsync("BTC/USD", ct);
         var btcUsdRate = latest?.PriceUsd ?? 60000.0; // fallback estimate

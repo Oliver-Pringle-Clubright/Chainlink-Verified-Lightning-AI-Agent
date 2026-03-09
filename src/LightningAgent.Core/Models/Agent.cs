@@ -11,6 +11,9 @@ public class Agent
     public AgentStatus Status { get; set; }
     public long DailySpendCapSats { get; set; }
     public long WeeklySpendCapSats { get; set; }
+    public string? WebhookUrl { get; set; }
+    public string? ApiKeyHash { get; set; }
+    public int RateLimitPerMinute { get; set; } = 100;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

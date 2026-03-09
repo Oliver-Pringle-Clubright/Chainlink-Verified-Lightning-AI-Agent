@@ -12,4 +12,6 @@ public interface IEscrowRepository
     Task<int> CreateAsync(Escrow escrow, CancellationToken ct = default);
     Task UpdateAsync(Escrow escrow, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, EscrowStatus status, CancellationToken ct = default);
+    Task<int> GetCountByStatusAsync(EscrowStatus status, CancellationToken ct = default);
+    Task<long> GetHeldAmountSatsAsync(CancellationToken ct = default);
 }

@@ -2,6 +2,7 @@ using System.Text;
 using LightningAgent.AI.Fraud;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
+using LightningAgent.Core.Models;
 using LightningAgent.Core.Models.AI;
 using Microsoft.Extensions.Logging;
 
@@ -16,17 +17,23 @@ public class FraudDetector : IFraudDetector
     private readonly SybilDetector _sybilDetector;
     private readonly RecycledOutputDetector _recycledDetector;
     private readonly IAgentReputationRepository _reputationRepo;
+    private readonly IMilestoneRepository _milestoneRepo;
+    private readonly ITaskRepository _taskRepo;
     private readonly ILogger<FraudDetector> _logger;
 
     public FraudDetector(
         SybilDetector sybilDetector,
         RecycledOutputDetector recycledDetector,
         IAgentReputationRepository reputationRepo,
+        IMilestoneRepository milestoneRepo,
+        ITaskRepository taskRepo,
         ILogger<FraudDetector> logger)
     {
         _sybilDetector = sybilDetector;
         _recycledDetector = recycledDetector;
         _reputationRepo = reputationRepo;
+        _milestoneRepo = milestoneRepo;
+        _taskRepo = taskRepo;
         _logger = logger;
     }
 
@@ -75,9 +82,30 @@ public class FraudDetector : IFraudDetector
 
         var currentOutput = Encoding.UTF8.GetString(output);
 
-        // In production, this would query the database for previous outputs
-        // from the same agent or similar tasks. For now, pass an empty list.
+        // Get the milestone's task to find the assigned agent
+        var milestone = await _milestoneRepo.GetByIdAsync(milestoneId, ct);
         var previousOutputs = new List<string>();
+
+        if (milestone is not null)
+        {
+            var task = await _taskRepo.GetByIdAsync(milestone.TaskId, ct);
+            int agentId = task?.AssignedAgentId ?? 0;
+
+            if (agentId > 0)
+            {
+                // Query previous completed milestones by the same agent
+                var completedMilestones = await _milestoneRepo.GetCompletedByAgentAsync(agentId, 10, ct);
+
+                previousOutputs = completedMilestones
+                    .Where(m => m.Id != milestoneId && !string.IsNullOrEmpty(m.VerificationResult))
+                    .Select(m => m.VerificationResult!)
+                    .ToList();
+
+                _logger.LogInformation(
+                    "Found {Count} previous outputs from agent {AgentId} for recycled output detection",
+                    previousOutputs.Count, agentId);
+            }
+        }
 
         var report = await _recycledDetector.DetectAsync(currentOutput, previousOutputs, ct);
 

@@ -1,5 +1,8 @@
 namespace LightningAgent.Api.Middleware;
 
+using LightningAgent.Api.Helpers;
+using LightningAgent.Core.Interfaces.Data;
+
 public class ApiKeyAuthMiddleware
 {
     private readonly RequestDelegate _next;
@@ -41,22 +44,49 @@ public class ApiKeyAuthMiddleware
         }
 
         if (!context.Request.Headers.TryGetValue(ApiKeyHeader, out var providedKey) ||
-            !string.Equals(providedKey, configuredKey, StringComparison.Ordinal))
+            string.IsNullOrEmpty(providedKey))
         {
-            _logger.LogWarning("Unauthorized request to {Path} - invalid or missing API key", path);
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.ContentType = "application/problem+json";
-            await context.Response.WriteAsJsonAsync(new
-            {
-                type = "https://tools.ietf.org/html/rfc7235#section-3.1",
-                title = "Unauthorized",
-                status = 401,
-                detail = "Invalid or missing API key.",
-                traceId = context.TraceIdentifier
-            });
+            await WriteUnauthorized(context, path);
             return;
         }
 
-        await _next(context);
+        // 1. Check for global API key (admin access)
+        if (string.Equals(providedKey, configuredKey, StringComparison.Ordinal))
+        {
+            context.Items["IsAdmin"] = true;
+            await _next(context);
+            return;
+        }
+
+        // 2. Check for per-agent API key
+        var agentRepo = context.RequestServices.GetRequiredService<IAgentRepository>();
+        var hash = ApiKeyHasher.Hash(providedKey!);
+        var agent = await agentRepo.GetByApiKeyHashAsync(hash);
+
+        if (agent is not null)
+        {
+            context.Items["AuthenticatedAgentId"] = agent.Id;
+            context.Items["AuthenticatedAgentRateLimit"] = agent.RateLimitPerMinute;
+            await _next(context);
+            return;
+        }
+
+        // 3. No match at all
+        await WriteUnauthorized(context, path);
+    }
+
+    private async Task WriteUnauthorized(HttpContext context, string path)
+    {
+        _logger.LogWarning("Unauthorized request to {Path} - invalid or missing API key", path);
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc7235#section-3.1",
+            title = "Unauthorized",
+            status = 401,
+            detail = "Invalid or missing API key.",
+            traceId = context.TraceIdentifier
+        });
     }
 }

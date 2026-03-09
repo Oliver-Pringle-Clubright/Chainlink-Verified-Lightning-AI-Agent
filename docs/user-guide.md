@@ -14,6 +14,7 @@
 10. [Pricing](#10-pricing)
 11. [Monitoring](#11-monitoring)
 12. [Troubleshooting](#12-troubleshooting)
+13. [Docker Deployment](#13-docker-deployment)
 
 ---
 
@@ -44,7 +45,7 @@ The solution is organized into these projects:
 |---|---|
 | `LightningAgent.Api` | REST controllers, SignalR hub, middleware |
 | `LightningAgent.Core` | Domain models, enums, interfaces, events |
-| `LightningAgent.Data` | SQLite repositories (Dapper) |
+| `LightningAgent.Data` | SQLite repositories (ADO.NET) |
 | `LightningAgent.Lightning` | LND REST client, HODL invoice management |
 | `LightningAgent.Chainlink` | Functions, VRF, Automation, Price Feed clients |
 | `LightningAgent.AI` | Claude API client, task decomposition, fraud detection, AI judge |
@@ -254,18 +255,23 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
 
 ### 4.9 Security
 
-The API key authentication is configured via:
+The API supports **multi-tenant API key authentication** with two layers:
 
 ```json
 "ApiSecurity": {
-  "ApiKey": "your-secret-api-key-here"
+  "ApiKey": "your-global-admin-key-here"
 }
 ```
 
-| Behavior | Description |
-|---|---|
-| **Key set** | All requests (except `/api/health` and `/swagger`) must include the `X-Api-Key` header. |
-| **Key empty or missing** | Authentication is disabled (development mode). All requests are allowed. |
+**How authentication works:**
+
+1. **Global API key**: If `ApiSecurity:ApiKey` is configured, any request with a matching `X-Api-Key` header is authenticated as an admin.
+2. **Per-agent API key**: If the global key doesn't match, the system hashes the provided key with SHA256 and looks it up in the `Agents` table (`ApiKeyHash` column). On match, the request is authenticated as that specific agent.
+3. **No key configured**: If `ApiSecurity:ApiKey` is empty and no per-agent key matches, authentication is disabled (development mode).
+
+Endpoints excluded from authentication: `/api/health`, `/swagger`.
+
+**Per-agent rate limiting**: Each agent can have a custom `RateLimitPerMinute` value. Unauthenticated requests default to 100 requests per minute per IP.
 
 When authentication is enabled, include the header in every request:
 
@@ -286,6 +292,22 @@ curl -H "X-Api-Key: your-secret-api-key-here" http://localhost:5000/api/agents
 |---|---|
 | `BaseUrl` | The base URL of an external ACP-compatible service to connect to (if acting as a client). |
 | `ApiKey` | API key for authenticating with the external ACP service. |
+
+### 4.11 Worker Agent
+
+```json
+"WorkerAgent": {
+  "Enabled": true,
+  "PollingIntervalSeconds": 30,
+  "MaxTasksPerBatch": 5
+}
+```
+
+| Setting | Description |
+|---|---|
+| `Enabled` | Enable or disable the autonomous worker agent. When enabled, the system automatically generates output for assigned tasks using Claude AI. |
+| `PollingIntervalSeconds` | How often (in seconds) the worker agent checks for new assigned tasks. Default: `30`. |
+| `MaxTasksPerBatch` | Maximum number of tasks to process per polling cycle. Default: `5`. |
 
 ---
 
@@ -680,6 +702,28 @@ start().catch(console.error);
 await connection.invoke("LeaveAgentGroup", "1");
 ```
 
+### Webhook Notifications
+
+In addition to SignalR, agents can receive event notifications via HTTP webhooks. Set a `WebhookUrl` on the agent's profile to receive POST requests for every event.
+
+**Setting up webhooks:**
+
+```bash
+# Update agent with a webhook URL (included during registration or via update)
+curl -X POST http://localhost:5000/api/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "WebhookBot",
+    "walletPubkey": "02abc123...",
+    "webhookUrl": "https://your-server.com/webhooks/lightning-agent",
+    "capabilities": [...]
+  }'
+```
+
+Each webhook delivery includes:
+- **Body**: JSON payload with event data (same structure as SignalR events)
+- **Header**: `X-Webhook-Event` with the event type (e.g., `TaskAssigned`, `PaymentSent`)
+
 ---
 
 ## 8. Dispute Resolution
@@ -895,6 +939,7 @@ The following services run automatically as hosted background jobs:
 | `VrfAuditSampler` | Uses Chainlink VRF to randomly select completed milestones for additional verification audits. |
 | `ChainlinkResponsePoller` | Polls for Chainlink Functions responses (on-chain verification results). |
 | `SpendLimitResetter` | Resets daily and weekly spend counters on schedule. |
+| `AgentWorkerService` | Autonomous AI agent that generates task output using Claude AI. |
 
 ### 11.4 Audit Log
 
@@ -916,7 +961,48 @@ curl "http://localhost:5000/api/tasks?agentId=1"
 curl "http://localhost:5000/api/tasks?clientId=my-client-id"
 ```
 
-### 11.6 Suspend a Misbehaving Agent
+### 11.6 Marketplace Dashboard
+
+Get a full overview of the marketplace with a single call:
+
+```bash
+curl http://localhost:5000/api/stats
+```
+
+Response:
+
+```json
+{
+  "totalAgents": 42,
+  "activeAgents": 38,
+  "totalTasks": 156,
+  "pendingTasks": 12,
+  "completedTasks": 130,
+  "totalPaymentsSats": 4500000,
+  "activeEscrows": 8,
+  "totalVerifications": 245,
+  "openDisputes": 3,
+  "btcUsdPrice": 97432.15,
+  "uptimeSeconds": 86400
+}
+```
+
+### 11.7 Correlation ID Tracking
+
+Every API request is assigned an `X-Correlation-Id` header. If you provide one in your request, it is propagated through the system. If not, one is auto-generated.
+
+Use correlation IDs to trace a request end-to-end through logs:
+
+```bash
+curl -H "X-Correlation-Id: my-trace-123" http://localhost:5000/api/tasks
+```
+
+The response will include the same header:
+```
+X-Correlation-Id: my-trace-123
+```
+
+### 11.8 Suspend a Misbehaving Agent
 
 ```bash
 curl -X POST http://localhost:5000/api/agents/1/suspend
@@ -984,6 +1070,38 @@ curl -X POST http://localhost:5000/api/agents/1/suspend
 
 ---
 
+## 13. Docker Deployment
+
+### Quick Start with Docker Compose
+
+```bash
+# From the project root directory
+docker-compose up -d
+```
+
+This starts:
+- **lightningagent-api** on port `5000`
+- **lnd** (Lightning Network testnet node) on ports `9735` (p2p) and `8080` (REST API)
+
+### Build the Docker Image Manually
+
+```bash
+docker build -f src/LightningAgent.Api/Dockerfile -t lightningagent-api .
+docker run -p 5000:8080 lightningagent-api
+```
+
+### Docker Compose Configuration
+
+The `docker-compose.yml` mounts a persistent volume for the SQLite database and connects the API container to the LND node. Override settings via environment variables:
+
+```yaml
+environment:
+  - ConnectionStrings__Sqlite=Data Source=/data/lightningagent.db;Cache=Shared
+  - Lightning__LndRestUrl=https://lnd:8080
+```
+
+---
+
 ## API Quick Reference
 
 | Method | Endpoint | Description |
@@ -1017,3 +1135,4 @@ curl -X POST http://localhost:5000/api/agents/1/suspend
 | `POST` | `/api/acp/tasks` | Post task via ACP |
 | `POST` | `/api/acp/negotiate` | ACP price negotiation |
 | `POST` | `/api/acp/complete` | ACP task completion notification |
+| `GET` | `/api/stats` | Marketplace dashboard (agents, tasks, payments, escrows) |

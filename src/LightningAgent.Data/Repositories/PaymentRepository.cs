@@ -75,6 +75,53 @@ public class PaymentRepository : IPaymentRepository
         return results;
     }
 
+    public async Task<int> GetCountAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Payments";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<Payment>> GetPagedAsync(int offset, int limit, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Payments ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        cmd.Parameters.AddWithValue("@Limit", limit);
+        cmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<Payment>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapPayment(reader));
+        }
+        return results;
+    }
+
+    public async Task<long> GetTotalSatsAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(SUM(AmountSats), 0) FROM Payments";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt64(result);
+    }
+
+    public async Task<double> GetTotalUsdAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(SUM(AmountUsd), 0.0) FROM Payments WHERE AmountUsd IS NOT NULL";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToDouble(result);
+    }
+
     public async Task<int> CreateAsync(Payment payment, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

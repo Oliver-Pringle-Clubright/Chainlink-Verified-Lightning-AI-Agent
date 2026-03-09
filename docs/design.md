@@ -31,8 +31,8 @@ Together these form an autonomous agent economy: agents register capabilities, t
  ┌──────────────────────────────────────────────────────────────┐
  │                       API Layer                              │
  │  Controllers (Tasks, Agents, Milestones, Payments, Pricing,  │
- │  Disputes, ACP, Health)  ·  SignalR Hub  ·  Middleware       │
- │  (ApiKeyAuth, RateLimiting, ExceptionHandling)               │
+ │  Disputes, ACP, Stats, Health)  ·  SignalR Hub  ·  Middleware │
+ │  (ApiKeyAuth, RateLimiting, CorrelationId, ExceptionHandling)│
  └────────────────────────────┬─────────────────────────────────┘
                               │
                               ▼
@@ -41,7 +41,8 @@ Together these form an autonomous agent economy: agents register capabilities, t
  │  TaskOrchestrator  ·  TaskDecompositionEngine  ·  AgentMatcher│
  │  EscrowManager  ·  PaymentService  ·  PricingService         │
  │  ReputationService  ·  SpendLimitService  ·  DisputeResolver │
- │  FraudDetector  ·  Workflows  ·  Background Jobs             │
+ │  FraudDetector  ·  WorkerAgent  ·  WebhookDelivery           │
+ │  Workflows  ·  Background Jobs                                │
  └──┬──────────┬──────────┬───────────┬─────────────────────────┘
     │          │          │           │
     ▼          ▼          ▼           ▼
@@ -145,15 +146,15 @@ LightningAgent.sln
 | # | Project | Responsibility |
 |---|---------|---------------|
 | 1 | **LightningAgent.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, etc.), all service and repository interfaces. Zero external dependencies. |
-| 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (11 tables with indexes), 13 repository implementations. |
+| 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (11 tables with indexes), 15 repository implementations. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
 | 3 | **LightningAgent.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
 | 4 | **LightningAgent.Chainlink** | Nethereum-based clients for four Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (verifiable random number requests), `ChainlinkPriceFeedClient` (BTC/USD price feed). Ethereum account provider for private key management. ABI definitions for all four contracts. |
 | 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification. `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
 | 6 | **LightningAgent.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
 | 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type and runs them concurrently via `Task.WhenAll`. Five strategies: `AiJudgeVerification` (subjective quality via Claude), `CodeCompileVerification` (compile + test pass rate), `SchemaValidationVerification` (JSON/XML schema checks), `TextSimilarityVerification` (cosine similarity scoring), `ClipScoreVerification` (image-prompt alignment). |
-| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle. `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry). `PaymentService`, `PricingService`, `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. Five background services. |
-| 9 | **LightningAgent.Api** | ASP.NET Web API host. Eight controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Health). SignalR `AgentNotificationHub` for real-time events. Three middleware components (API key auth, rate limiting, exception handling). DTOs for request/response shaping. `Program.cs` wires all DI registrations. |
-| 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. |
+| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle. `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry). `PaymentService`, `PricingService`, `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. Six background services. |
+| 9 | **LightningAgent.Api** | ASP.NET Web API host. Nine controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health). SignalR `AgentNotificationHub` for real-time events. Four middleware components (API key auth, rate limiting, correlation ID tracking, exception handling). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, PaginatedResponse). `Program.cs` wires all DI registrations. |
+| 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 35 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, and escrow lifecycle. |
 
 ### Dependency Graph
 
@@ -371,7 +372,7 @@ The `VrfAuditSampler` requests a random number from Chainlink VRF every 5 minute
 
 ## 9. Background Services
 
-Five `BackgroundService` implementations run as hosted services in the ASP.NET process:
+Six `BackgroundService` implementations run as hosted services in the ASP.NET process:
 
 | Service | Interval | Responsibility |
 |---------|----------|---------------|
@@ -380,8 +381,9 @@ Five `BackgroundService` implementations run as hosted services in the ASP.NET p
 | **VrfAuditSampler** | Every 5 minutes | Requests randomness from Chainlink VRF, selects a completed task from the last 24 hours for audit, runs sybil detection and anomaly scoring against the assigned agent. Logs warnings for high anomaly scores (> 0.7) and sybil alerts. |
 | **PriceFeedRefresher** | Every 5 minutes | Calls `IPricingService.GetBtcUsdPriceAsync()` which reads the Chainlink BTC/USD Price Feed and caches the result in the `PriceCache` table. Ensures the system always has a recent exchange rate for USD-to-sats conversions. |
 | **SpendLimitResetter** | Every 1 hour | Calls `ISpendLimitService.ResetExpiredPeriodsAsync()` to reset spend counters for agents whose daily or weekly period has elapsed. Ensures spend caps roll over correctly. |
+| **AgentWorkerService** | Every 30 seconds | Polls for tasks assigned to active agents. For each agent with assigned work, builds an AI prompt from the task and milestone descriptions, calls Claude to generate output, and submits the result through the TaskLifecycleWorkflow. Configurable via `WorkerAgentSettings` (enabled/disabled, polling interval, batch size). |
 
-All five services handle `OperationCanceledException` for graceful shutdown and log errors without crashing the host process.
+All six services handle `OperationCanceledException` for graceful shutdown and log errors without crashing the host process.
 
 ---
 
@@ -389,11 +391,19 @@ All five services handle `OperationCanceledException` for graceful shutdown and 
 
 ### API Key Authentication
 
-The `ApiKeyAuthMiddleware` enforces an `X-Api-Key` header on all requests except `/api/health` and `/swagger`. The expected key is read from configuration (`ApiSecurity:ApiKey`). In development mode (no key configured), all requests are allowed. Invalid or missing keys receive a `401 Unauthorized` response with a problem+json body.
+The `ApiKeyAuthMiddleware` implements multi-tenant authentication. It first checks for a global `ApiSecurity:ApiKey` in configuration. If the provided key does not match the global key, the middleware hashes the provided key with SHA256 and looks up the agent via `GetByApiKeyHashAsync`. On match, it sets `HttpContext.Items["AuthenticatedAgentId"]` to the agent's ID, enabling per-agent authorization downstream. Health and Swagger endpoints are excluded from authentication.
 
 ### Rate Limiting
 
-The `RateLimitingMiddleware` enforces a sliding window rate limit of **100 requests per minute per client IP**. It uses a `ConcurrentDictionary<string, ClientRequestInfo>` with per-client queues of request timestamps. Stale entries are cleaned up every 5 minutes. Requests exceeding the limit receive a `429 Too Many Requests` response with a `Retry-After: 60` header.
+The `RateLimitingMiddleware` enforces per-agent rate limiting. When an agent is authenticated (via API key), their `RateLimitPerMinute` setting from the database is used as the sliding window limit. For unauthenticated requests, the middleware falls back to the default 100 requests per minute per client IP. It uses a `ConcurrentDictionary<string, ClientRequestInfo>` with per-client queues of request timestamps. Stale entries are cleaned up every 5 minutes. Requests exceeding the limit receive a `429 Too Many Requests` response with a `Retry-After: 60` header.
+
+### Correlation ID Tracking
+
+The `CorrelationIdMiddleware` reads or generates an `X-Correlation-Id` header on every request. The ID is propagated into the response headers and injected into the logging scope, enabling end-to-end request tracing across all log entries.
+
+### Webhook Delivery
+
+The `WebhookDeliveryService` delivers JSON event payloads to agent-configured webhook URLs. Agents can set a `WebhookUrl` on their profile. When events fire (task assigned, milestone verified, payment sent, etc.), the service POSTs a JSON body to the URL with an `X-Webhook-Event` header identifying the event type.
 
 ### Spend Caps
 
@@ -424,3 +434,30 @@ The `ExceptionHandlingMiddleware` catches unhandled exceptions at the API bounda
 ### Audit Trail
 
 The `AuditLog` table records all significant events with `EventType`, `EntityType`, `EntityId`, `Details`, and `CreatedAt`. This provides a forensic trail for investigating disputes, payment discrepancies, and agent behavior anomalies.
+
+---
+
+## 11. Deployment
+
+### Docker
+
+The system includes a multi-stage Dockerfile (`src/LightningAgent.Api/Dockerfile`) and a `docker-compose.yml` for container deployment.
+
+**Dockerfile** uses a two-stage build:
+1. **Build stage**: `mcr.microsoft.com/dotnet/sdk:10.0-preview` restores and publishes the solution in Release mode.
+2. **Runtime stage**: `mcr.microsoft.com/dotnet/aspnet:10.0-preview` runs the published output with minimal image size.
+
+**docker-compose.yml** defines two services:
+- `lightningagent-api`: The API server, exposed on port 5000, with volume mount for the SQLite database.
+- `lnd`: An LND testnet node for Lightning Network integration, with persistent volumes for LND data.
+
+### Database Migrations
+
+The `MigrationRunner` executes versioned SQL migrations on startup. Migrations are tracked in a `__Migrations` table with version, name, and applied timestamp. The v1.1.0 migration adds `WebhookUrl`, `ApiKeyHash`, and `RateLimitPerMinute` columns to the `Agents` table.
+
+### Resilience
+
+All external HTTP clients (LND, Chainlink, Claude AI, ACP) are configured with Polly-based resilience pipelines via `Microsoft.Extensions.Http.Resilience`. Each client gets:
+- **Retry**: Exponential backoff with jitter for transient failures.
+- **Circuit breaker**: Prevents cascading failures when a downstream service is unresponsive.
+- **Timeout**: Per-request timeout to avoid hanging indefinitely.

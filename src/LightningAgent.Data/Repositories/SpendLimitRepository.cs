@@ -103,6 +103,22 @@ public class SpendLimitRepository : ISpendLimitRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public async Task<IReadOnlyList<SpendLimit>> GetExpiredAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM SpendLimits WHERE PeriodEnd <= @Now";
+        cmd.Parameters.AddWithValue("@Now", DateTime.UtcNow.ToString("o"));
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<SpendLimit>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapSpendLimit(reader));
+        }
+        return results;
+    }
+
     private static SpendLimit MapSpendLimit(SqliteDataReader reader)
     {
         return new SpendLimit

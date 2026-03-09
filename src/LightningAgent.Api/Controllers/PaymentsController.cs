@@ -1,3 +1,4 @@
+using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -20,27 +21,52 @@ public class PaymentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<Payment>>> ListPayments(
+    public async Task<ActionResult<PaginatedResponse<Payment>>> ListPayments(
         [FromQuery] int? taskId,
         [FromQuery] int? agentId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
-        IReadOnlyList<Payment> payments;
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100;
 
+        // When filtered by taskId or agentId, use in-memory pagination
         if (taskId.HasValue)
         {
-            payments = await _paymentRepository.GetByTaskIdAsync(taskId.Value, ct);
-        }
-        else if (agentId.HasValue)
-        {
-            payments = await _paymentRepository.GetByAgentIdAsync(agentId.Value, ct);
-        }
-        else
-        {
-            return BadRequest("Provide either taskId or agentId query parameter.");
+            var taskPayments = await _paymentRepository.GetByTaskIdAsync(taskId.Value, ct);
+            var total = taskPayments.Count;
+            var items = taskPayments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            return Ok(new PaginatedResponse<Payment>
+            {
+                Items = items, Page = page, PageSize = pageSize, TotalCount = total
+            });
         }
 
-        return Ok(payments);
+        if (agentId.HasValue)
+        {
+            var agentPayments = await _paymentRepository.GetByAgentIdAsync(agentId.Value, ct);
+            var total = agentPayments.Count;
+            var items = agentPayments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            return Ok(new PaginatedResponse<Payment>
+            {
+                Items = items, Page = page, PageSize = pageSize, TotalCount = total
+            });
+        }
+
+        // No filter: return all payments, paginated
+        var offset = (page - 1) * pageSize;
+        var totalCount = await _paymentRepository.GetCountAsync(ct);
+        var payments = await _paymentRepository.GetPagedAsync(offset, pageSize, ct);
+
+        return Ok(new PaginatedResponse<Payment>
+        {
+            Items = payments.ToList(),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        });
     }
 
     [HttpGet("{id:int}")]

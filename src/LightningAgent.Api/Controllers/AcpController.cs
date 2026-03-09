@@ -119,6 +119,8 @@ public class AcpController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(spec.Title))
             return BadRequest("Title is required.");
+        if (string.IsNullOrWhiteSpace(spec.Description))
+            return BadRequest("Description is required.");
 
         var externalId = string.IsNullOrWhiteSpace(spec.TaskId)
             ? Guid.NewGuid().ToString("N")
@@ -182,6 +184,10 @@ public class AcpController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.TaskId))
             return BadRequest("TaskId is required.");
+        if (request.RequesterBudgetSats <= 0)
+            return BadRequest("RequesterBudgetSats must be greater than zero.");
+        if (request.WorkerAskingSats <= 0)
+            return BadRequest("WorkerAskingSats must be greater than zero.");
 
         var midpoint = (request.RequesterBudgetSats + request.WorkerAskingSats) / 2;
 

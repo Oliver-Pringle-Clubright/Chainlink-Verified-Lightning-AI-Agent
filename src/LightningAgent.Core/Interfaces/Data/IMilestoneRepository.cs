@@ -10,4 +10,5 @@ public interface IMilestoneRepository
     Task<int> CreateAsync(Milestone milestone, CancellationToken ct = default);
     Task UpdateAsync(Milestone milestone, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, MilestoneStatus status, CancellationToken ct = default);
+    Task<IReadOnlyList<Milestone>> GetCompletedByAgentAsync(int agentId, int limit = 10, CancellationToken ct = default);
 }

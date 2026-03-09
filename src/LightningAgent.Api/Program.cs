@@ -16,6 +16,8 @@ using LightningAgent.AI.Orchestrator;
 using LightningAgent.AI.Fraud;
 using LightningAgent.Api.Hubs;
 using LightningAgent.Api.Middleware;
+using LightningAgent.Api.Services;
+using LightningAgent.Data.Migrations;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,7 @@ var sqliteConnectionString = builder.Configuration.GetConnectionString("Sqlite")
     ?? "Data Source=lightningagent.db;Cache=Shared";
 builder.Services.AddSingleton(new SqliteConnectionFactory(sqliteConnectionString));
 builder.Services.AddSingleton<DatabaseInitializer>();
+builder.Services.AddSingleton<MigrationRunner>();
 
 // ── Repositories (scoped) ───────────────────────────────────────────
 builder.Services.AddScoped<IAgentRepository, AgentRepository>();
@@ -49,6 +52,7 @@ builder.Services.Configure<EscrowSettings>(builder.Configuration.GetSection("Esc
 builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pricing"));
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
+builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
 
 // ── Lightning Network ─────────────────────────────────────────────
 builder.Services.AddLightningServices(builder.Configuration);
@@ -65,6 +69,12 @@ builder.Services.AddAcpServices(builder.Configuration);
 // ── Verification Pipeline ─────────────────────────────────────────
 builder.Services.AddVerificationServices();
 
+// ── Webhook Delivery ─────────────────────────────────────────
+builder.Services.AddHttpClient<WebhookDeliveryService>();
+
+// ── SignalR Event Publishing ──────────────────────────────────
+builder.Services.AddScoped<IEventPublisher, SignalREventPublisher>();
+
 // ── Engine Services ───────────────────────────────────────────────
 builder.Services.AddScoped<IEscrowManager, EscrowManager>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
@@ -78,6 +88,8 @@ builder.Services.AddScoped<IFraudDetector, FraudDetector>();
 builder.Services.AddScoped<TaskDecompositionEngine>();
 builder.Services.AddScoped<TaskLifecycleWorkflow>();
 builder.Services.AddScoped<MilestonePaymentWorkflow>();
+builder.Services.AddScoped<WorkerAgent>();
+builder.Services.AddHostedService<AgentWorkerService>();
 builder.Services.AddHostedService<EscrowExpiryChecker>();
 builder.Services.AddHostedService<SpendLimitResetter>();
 builder.Services.AddHostedService<ChainlinkResponsePoller>();
@@ -108,12 +120,16 @@ using (var scope = app.Services.CreateScope())
 {
     var dbInit = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
     await dbInit.InitializeAsync();
+
+    var migrationRunner = scope.ServiceProvider.GetRequiredService<MigrationRunner>();
+    await migrationRunner.RunMigrationsAsync();
 }
 
 // ── Middleware pipeline ─────────────────────────────────────────────
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-app.UseMiddleware<RateLimitingMiddleware>();
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
+app.UseMiddleware<RateLimitingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

@@ -23,28 +23,27 @@ public class ClipScoreVerification : IVerificationStrategy
         byte[] agentOutput,
         CancellationToken ct = default)
     {
-        _logger.LogInformation(
-            "Running CLIP score verification for milestone {MilestoneId} (stub implementation)",
+        _logger.LogWarning(
+            "CLIP score verification for milestone {MilestoneId}: CLIP integration is not configured. " +
+            "Image verification requires an external CLIP API integration.",
             milestone.Id);
 
-        // Stub implementation: in production this would call a CLIP scoring API
-        // to compare the generated image against the task description.
-        // For now, return a default passing score if the output contains image data.
-
-        var hasContent = agentOutput.Length > 0;
-        var score = hasContent ? 0.85 : 0.0;
-        var passed = hasContent;
-        var details = hasContent
-            ? "CLIP score verification passed (stub: image data present)"
-            : "CLIP score verification failed: no image data provided";
+        // CLIP scoring service is not configured. Return a failing result so that
+        // image milestones do not silently pass with a fake score. In production,
+        // this would call a CLIP scoring API to compare the generated image
+        // against the task description.
+        const double placeholderScore = 0.7; // Below default pass threshold of 0.8
+        const bool passed = false;
+        const string details = "CLIP scoring service not configured. " +
+            "Image verification requires external CLIP API integration.";
 
         _logger.LogInformation(
             "CLIP score verification result: Score={Score}, Passed={Passed}",
-            score,
+            placeholderScore,
             passed);
 
         return Task.FromResult(new VerificationResult(
-            Score: score,
+            Score: placeholderScore,
             Passed: passed,
             Details: details,
             StrategyType: VerificationStrategyType.ClipScore));

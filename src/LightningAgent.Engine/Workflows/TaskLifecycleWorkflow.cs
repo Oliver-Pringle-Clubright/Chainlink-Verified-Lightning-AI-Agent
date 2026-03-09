@@ -17,6 +17,7 @@ public class TaskLifecycleWorkflow
     private readonly IEscrowRepository _escrowRepo;
     private readonly IPaymentService _paymentService;
     private readonly IReputationService _reputationService;
+    private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<TaskLifecycleWorkflow> _logger;
 
     /// <summary>
@@ -34,6 +35,7 @@ public class TaskLifecycleWorkflow
         IEscrowRepository escrowRepo,
         IPaymentService paymentService,
         IReputationService reputationService,
+        IEventPublisher eventPublisher,
         ILogger<TaskLifecycleWorkflow> logger)
     {
         _taskRepo = taskRepo;
@@ -44,6 +46,7 @@ public class TaskLifecycleWorkflow
         _escrowRepo = escrowRepo;
         _paymentService = paymentService;
         _reputationService = reputationService;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -106,6 +109,8 @@ public class TaskLifecycleWorkflow
 
         if (passed)
         {
+            await _eventPublisher.PublishMilestoneVerifiedAsync(milestoneId, milestone.TaskId, true, averageScore, ct);
+
             // 6a. Update milestone status to Passed
             milestone.Status = MilestoneStatus.Passed;
             milestone.VerifiedAt = DateTime.UtcNow;
@@ -144,6 +149,10 @@ public class TaskLifecycleWorkflow
         }
         else
         {
+            var failReason = string.Join("; ",
+                results.Where(r => !r.Passed).Select(r => $"{r.StrategyType}: {r.Score:F2}"));
+            await _eventPublisher.PublishVerificationFailedAsync(milestoneId, milestone.TaskId, failReason, ct);
+
             // 7a. Update milestone status to Failed
             milestone.Status = MilestoneStatus.Failed;
             milestone.VerificationResult = string.Join("; ",

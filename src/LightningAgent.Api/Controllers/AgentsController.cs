@@ -1,8 +1,13 @@
 using LightningAgent.Api.DTOs;
+using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
+using LightningAgent.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
 
@@ -13,17 +18,23 @@ public class AgentsController : ControllerBase
     private readonly IAgentRepository _agentRepository;
     private readonly IAgentCapabilityRepository _capabilityRepository;
     private readonly IAgentReputationRepository _reputationRepository;
+    private readonly ITaskRepository _taskRepository;
+    private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<AgentsController> _logger;
 
     public AgentsController(
         IAgentRepository agentRepository,
         IAgentCapabilityRepository capabilityRepository,
         IAgentReputationRepository reputationRepository,
+        ITaskRepository taskRepository,
+        IEventPublisher eventPublisher,
         ILogger<AgentsController> logger)
     {
         _agentRepository = agentRepository;
         _capabilityRepository = capabilityRepository;
         _reputationRepository = reputationRepository;
+        _taskRepository = taskRepository;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -35,20 +46,51 @@ public class AgentsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest("Name is required.");
 
+        // Validate capabilities if provided
+        if (request.Capabilities is { Count: > 0 })
+        {
+            for (int i = 0; i < request.Capabilities.Count; i++)
+            {
+                var cap = request.Capabilities[i];
+                if (!Enum.TryParse<SkillType>(cap.SkillType, ignoreCase: true, out _))
+                    return BadRequest($"Capability [{i}]: Invalid SkillType '{cap.SkillType}'. Valid values: {string.Join(", ", Enum.GetNames<SkillType>())}");
+                if (cap.PriceSatsPerUnit <= 0)
+                    return BadRequest($"Capability [{i}]: PriceSatsPerUnit must be greater than zero.");
+            }
+        }
+
         var externalId = request.ExternalId ?? Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
+
+        // Generate a unique API key for this agent
+        var plaintextApiKey = Guid.NewGuid().ToString("N");
+        var apiKeyHash = ApiKeyHasher.Hash(plaintextApiKey);
 
         var agent = new Agent
         {
             ExternalId = externalId,
             Name = request.Name,
             WalletPubkey = request.WalletPubkey,
+            WebhookUrl = request.WebhookUrl,
+            ApiKeyHash = apiKeyHash,
             Status = AgentStatus.Active,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        var agentId = await _agentRepository.CreateAsync(agent, ct);
+        int agentId;
+        try
+        {
+            agentId = await _agentRepository.CreateAsync(agent, ct);
+        }
+        catch (SqliteException ex) when (SqliteExceptionHandler.IsUniqueConstraintViolation(ex))
+        {
+            return Conflict($"An agent with ExternalId '{externalId}' already exists.");
+        }
+        catch (SqliteException ex) when (SqliteExceptionHandler.IsForeignKeyViolation(ex))
+        {
+            return BadRequest("Invalid foreign key reference in agent data.");
+        }
 
         // Create capabilities if provided
         if (request.Capabilities is { Count: > 0 })
@@ -90,26 +132,37 @@ public class AgentsController : ControllerBase
 
         _logger.LogInformation("Registered agent {AgentId} (ext: {ExternalId})", agentId, externalId);
 
+        await _eventPublisher.PublishAgentRegisteredAsync(agentId, request.Name, ct);
+
         return Ok(new RegisterAgentResponse
         {
             AgentId = agentId,
             ExternalId = externalId,
-            Status = AgentStatus.Active.ToString()
+            Status = AgentStatus.Active.ToString(),
+            ApiKey = plaintextApiKey
         });
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<AgentDetailResponse>>> ListAgents(
+    public async Task<ActionResult<PaginatedResponse<AgentDetailResponse>>> ListAgents(
         [FromQuery] string? status,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100;
+
         AgentStatus? statusFilter = null;
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<AgentStatus>(status, ignoreCase: true, out var parsed))
         {
             statusFilter = parsed;
         }
 
-        var agents = await _agentRepository.GetAllAsync(statusFilter, ct);
+        var offset = (page - 1) * pageSize;
+        var totalCount = await _agentRepository.GetCountAsync(statusFilter, ct);
+        var agents = await _agentRepository.GetPagedAsync(offset, pageSize, statusFilter, ct);
 
         var result = agents.Select(a => new AgentDetailResponse
         {
@@ -120,7 +173,13 @@ public class AgentsController : ControllerBase
             Status = a.Status.ToString()
         }).ToList();
 
-        return Ok(result);
+        return Ok(new PaginatedResponse<AgentDetailResponse>
+        {
+            Items = result,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        });
     }
 
     [HttpGet("{id:int}")]
@@ -218,6 +277,37 @@ public class AgentsController : ControllerBase
             VerificationFails = reputation.VerificationFails,
             ReputationScore = reputation.ReputationScore
         });
+    }
+
+    [HttpGet("{id:int}/assigned-tasks")]
+    public async Task<ActionResult<List<TaskDetailResponse>>> GetAssignedTasks(int id, CancellationToken ct)
+    {
+        var agent = await _agentRepository.GetByIdAsync(id, ct);
+        if (agent is null)
+            return NotFound($"Agent {id} not found.");
+
+        var allTasks = await _taskRepository.GetByAssignedAgentAsync(id, ct);
+        var activeTasks = allTasks
+            .Where(t => t.Status is TaskStatus.Assigned or TaskStatus.InProgress)
+            .ToList();
+
+        var result = activeTasks.Select(t => new TaskDetailResponse
+        {
+            Id = t.Id,
+            ExternalId = t.ExternalId,
+            Title = t.Title,
+            Description = t.Description,
+            TaskType = t.TaskType.ToString(),
+            Status = t.Status.ToString(),
+            MaxPayoutSats = t.MaxPayoutSats,
+            ActualPayoutSats = t.ActualPayoutSats,
+            PriceUsd = t.PriceUsd,
+            AssignedAgentId = t.AssignedAgentId,
+            Priority = t.Priority,
+            CreatedAt = t.CreatedAt
+        }).ToList();
+
+        return Ok(result);
     }
 
     [HttpPost("{id:int}/suspend")]

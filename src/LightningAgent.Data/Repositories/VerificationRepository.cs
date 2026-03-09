@@ -74,6 +74,27 @@ public class VerificationRepository : IVerificationRepository
         return results;
     }
 
+    public async Task<int> GetCountByPassedAsync(bool passed, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Verifications WHERE Passed = @Passed";
+        cmd.Parameters.AddWithValue("@Passed", passed ? 1 : 0);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<int> GetTotalCountAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Verifications";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
     public async Task<int> CreateAsync(Verification verification, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -11,8 +12,19 @@ public class ChainlinkResponsePoller : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Maximum number of poll attempts per verification before marking it as timed out.
+    /// 60 retries * 30 seconds = 30 minutes.
+    /// </summary>
+    private const int MaxRetriesPerVerification = 60;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ChainlinkResponsePoller> _logger;
+
+    /// <summary>
+    /// Tracks the number of poll attempts per verification ID.
+    /// </summary>
+    private readonly ConcurrentDictionary<int, int> _retryCounters = new();
 
     public ChainlinkResponsePoller(
         IServiceScopeFactory scopeFactory,
@@ -47,11 +59,36 @@ public class ChainlinkResponsePoller : BackgroundService
                 {
                     try
                     {
+                        // Increment and check retry counter
+                        var retryCount = _retryCounters.AddOrUpdate(
+                            verification.Id,
+                            1,
+                            (_, existing) => existing + 1);
+
+                        if (retryCount > MaxRetriesPerVerification)
+                        {
+                            _logger.LogWarning(
+                                "Verification {Id} (requestId={RequestId}) exceeded max retries ({MaxRetries}). Marking as timed out.",
+                                verification.Id, verification.ChainlinkRequestId, MaxRetriesPerVerification);
+
+                            verification.Score = 0.0;
+                            verification.Passed = false;
+                            verification.Details = "Chainlink Functions response timed out";
+                            verification.CompletedAt = DateTime.UtcNow;
+
+                            await verificationRepo.UpdateAsync(verification, stoppingToken);
+                            _retryCounters.TryRemove(verification.Id, out _);
+                            continue;
+                        }
+
                         var response = await functionsClient.GetResponseAsync(
                             verification.ChainlinkRequestId!, stoppingToken);
 
                         if (response is null)
                         {
+                            _logger.LogDebug(
+                                "Verification {Id} (requestId={RequestId}): not ready yet (attempt {Attempt}/{Max})",
+                                verification.Id, verification.ChainlinkRequestId, retryCount, MaxRetriesPerVerification);
                             continue;
                         }
 
@@ -83,6 +120,7 @@ public class ChainlinkResponsePoller : BackgroundService
                         verification.CompletedAt = DateTime.UtcNow;
 
                         await verificationRepo.UpdateAsync(verification, stoppingToken);
+                        _retryCounters.TryRemove(verification.Id, out _);
 
                         _logger.LogInformation(
                             "Verification {Id} completed via Chainlink (requestId={RequestId}, passed={Passed}, score={Score:F2})",

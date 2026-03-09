@@ -19,7 +19,8 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IClaudeAiClient, ClaudeApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.anthropic.com");
-        });
+        })
+        .AddStandardResilienceHandler();
 
         services.AddScoped<INaturalLanguageTaskParser, NaturalLanguageTaskParser>();
         services.AddScoped<AiJudgeAgent>();

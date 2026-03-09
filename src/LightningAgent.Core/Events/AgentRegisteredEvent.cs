@@ -1,3 +1,6 @@
 namespace LightningAgent.Core.Events;
 
-public record AgentRegisteredEvent(int AgentId, string Name, DateTime Timestamp);
+public record AgentRegisteredEvent(
+    int AgentId,
+    string Name,
+    DateTime OccurredAt);

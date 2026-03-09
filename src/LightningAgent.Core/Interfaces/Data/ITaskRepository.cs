@@ -11,6 +11,8 @@ public interface ITaskRepository
     Task<IReadOnlyList<TaskItem>> GetByAssignedAgentAsync(int agentId, CancellationToken ct = default);
     Task<IReadOnlyList<TaskItem>> GetSubtasksAsync(int parentTaskId, CancellationToken ct = default);
     Task<IReadOnlyList<TaskItem>> GetCompletedSinceAsync(DateTime since, CancellationToken ct = default);
+    Task<int> GetCountAsync(TaskStatus? status = null, CancellationToken ct = default);
+    Task<IReadOnlyList<TaskItem>> GetPagedAsync(int offset, int limit, TaskStatus? status = null, CancellationToken ct = default);
     Task<int> CreateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, TaskStatus status, CancellationToken ct = default);

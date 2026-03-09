@@ -152,6 +152,27 @@ public class EscrowRepository : IEscrowRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public async Task<int> GetCountByStatusAsync(EscrowStatus status, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Escrows WHERE Status = @Status";
+        cmd.Parameters.AddWithValue("@Status", status.ToString());
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<long> GetHeldAmountSatsAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(SUM(AmountSats), 0) FROM Escrows WHERE Status = 'Held'";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt64(result);
+    }
+
     private static Escrow MapEscrow(SqliteDataReader reader)
     {
         return new Escrow

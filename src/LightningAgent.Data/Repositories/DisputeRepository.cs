@@ -74,6 +74,17 @@ public class DisputeRepository : IDisputeRepository
         return results;
     }
 
+    public async Task<int> GetCountByStatusAsync(DisputeStatus status, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Disputes WHERE Status = @Status";
+        cmd.Parameters.AddWithValue("@Status", status.ToString());
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
     public async Task<int> CreateAsync(Dispute dispute, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

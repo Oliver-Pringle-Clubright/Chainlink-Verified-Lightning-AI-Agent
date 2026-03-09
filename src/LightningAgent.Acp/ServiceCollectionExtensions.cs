@@ -15,7 +15,8 @@ public static class ServiceCollectionExtensions
         {
             if (!string.IsNullOrEmpty(settings.BaseUrl))
                 client.BaseAddress = new Uri(settings.BaseUrl);
-        });
+        })
+        .AddStandardResilienceHandler();
 
         return services;
     }

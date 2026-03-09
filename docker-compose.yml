@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  lightning-agent-api:
+    build:
+      context: .
+      dockerfile: src/LightningAgent.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - agent-data:/app/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Sqlite=Data Source=/app/data/lightningagent.db;Cache=Shared
+      - Lightning__LndRestUrl=https://lnd:8080
+      - ClaudeAi__ApiKey=${CLAUDE_API_KEY:-}
+      - Chainlink__EthereumRpcUrl=${ETH_RPC_URL:-}
+    depends_on:
+      - lnd
+    restart: unless-stopped
+
+  lnd:
+    image: lightninglabs/lnd:v0.18.0-beta
+    ports:
+      - "9735:9735"
+      - "10009:10009"
+    volumes:
+      - lnd-data:/root/.lnd
+    environment:
+      - LND_CHAIN=bitcoin
+      - LND_BACKEND=neutrino
+    command: >
+      lnd
+      --bitcoin.active
+      --bitcoin.testnet
+      --bitcoin.node=neutrino
+      --neutrino.connect=faucet.lightning.community
+      --rpclisten=0.0.0.0:10009
+      --restlisten=0.0.0.0:8080
+      --tlsextradomain=lnd
+    restart: unless-stopped
+
+volumes:
+  agent-data:
+  lnd-data:
