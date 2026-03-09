@@ -1,0 +1,35 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.exe
+
+## IDE
+.vs/
+.vscode/
+*.swp
+*~
+
+## Build
+publish/
+artifacts/
+
+## SQLite
+*.db
+*.db-shm
+*.db-wal
+
+## Secrets
+appsettings.*.local.json
+*.pfx
+*.key
+*.macaroon
+*.cert
+
+## OS
+Thumbs.db
+.DS_Store

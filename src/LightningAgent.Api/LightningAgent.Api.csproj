@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LightningAgent.Core\LightningAgent.Core.csproj" />
+    <ProjectReference Include="..\LightningAgent.Data\LightningAgent.Data.csproj" />
+    <ProjectReference Include="..\LightningAgent.Lightning\LightningAgent.Lightning.csproj" />
+    <ProjectReference Include="..\LightningAgent.Chainlink\LightningAgent.Chainlink.csproj" />
+    <ProjectReference Include="..\LightningAgent.Acp\LightningAgent.Acp.csproj" />
+    <ProjectReference Include="..\LightningAgent.AI\LightningAgent.AI.csproj" />
+    <ProjectReference Include="..\LightningAgent.Verification\LightningAgent.Verification.csproj" />
+    <ProjectReference Include="..\LightningAgent.Engine\LightningAgent.Engine.csproj" />
+  </ItemGroup>
+
+</Project>
