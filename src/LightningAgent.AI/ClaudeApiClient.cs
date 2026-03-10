@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models.AI;
@@ -18,7 +19,8 @@ public class ClaudeApiClient : IClaudeAiClient
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true) }
     };
 
     public ClaudeApiClient(

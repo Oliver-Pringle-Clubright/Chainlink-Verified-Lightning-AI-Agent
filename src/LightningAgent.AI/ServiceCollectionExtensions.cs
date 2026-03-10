@@ -7,6 +7,7 @@ using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Interfaces.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 
 namespace LightningAgent.AI;
 
@@ -19,8 +20,14 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IClaudeAiClient, ClaudeApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.anthropic.com");
+            client.Timeout = TimeSpan.FromMinutes(2);
         })
-        .AddStandardResilienceHandler();
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(5);
+        });
 
         services.AddScoped<INaturalLanguageTaskParser, NaturalLanguageTaskParser>();
         services.AddScoped<AiJudgeAgent>();

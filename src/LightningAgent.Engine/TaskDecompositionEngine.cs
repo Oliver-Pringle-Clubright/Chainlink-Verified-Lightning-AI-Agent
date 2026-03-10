@@ -54,6 +54,7 @@ public class TaskDecompositionEngine
             // Create the subtask entity
             var subtask = new TaskItem
             {
+                ExternalId = Guid.NewGuid().ToString("N"),
                 ParentTaskId = parentTask.Id,
                 ClientId = parentTask.ClientId,
                 Title = planned.Title,
