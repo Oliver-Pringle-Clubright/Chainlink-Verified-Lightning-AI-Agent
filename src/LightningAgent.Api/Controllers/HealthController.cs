@@ -1,3 +1,4 @@
+using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Data;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
@@ -17,13 +18,16 @@ public class HealthController : ControllerBase
 {
     private readonly SqliteConnectionFactory _connectionFactory;
     private readonly HealthCheckService _healthCheckService;
+    private readonly IServiceHealthTracker _serviceHealthTracker;
 
     public HealthController(
         SqliteConnectionFactory connectionFactory,
-        HealthCheckService healthCheckService)
+        HealthCheckService healthCheckService,
+        IServiceHealthTracker serviceHealthTracker)
     {
         _connectionFactory = connectionFactory;
         _healthCheckService = healthCheckService;
+        _serviceHealthTracker = serviceHealthTracker;
     }
 
     /// <summary>
@@ -94,6 +98,24 @@ public class HealthController : ControllerBase
             database = dbStatus,
             checks = entries,
             totalDuration = report.TotalDuration.TotalMilliseconds,
+            timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Returns the health status of all tracked background services.
+    /// </summary>
+    [HttpGet("services")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetServiceHealth()
+    {
+        var statuses = _serviceHealthTracker.GetAllStatuses();
+        var allHealthy = statuses.Count == 0 || statuses.Values.All(s => s.IsHealthy);
+
+        return Ok(new
+        {
+            status = allHealthy ? "healthy" : "degraded",
+            services = statuses,
             timestamp = DateTime.UtcNow
         });
     }

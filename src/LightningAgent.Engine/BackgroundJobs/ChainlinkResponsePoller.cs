@@ -20,6 +20,7 @@ public class ChainlinkResponsePoller : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ChainlinkResponsePoller> _logger;
+    private readonly IServiceHealthTracker _healthTracker;
 
     /// <summary>
     /// Tracks the number of poll attempts per verification ID.
@@ -28,10 +29,12 @@ public class ChainlinkResponsePoller : BackgroundService
 
     public ChainlinkResponsePoller(
         IServiceScopeFactory scopeFactory,
-        ILogger<ChainlinkResponsePoller> logger)
+        ILogger<ChainlinkResponsePoller> logger,
+        IServiceHealthTracker healthTracker)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _healthTracker = healthTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -134,6 +137,8 @@ public class ChainlinkResponsePoller : BackgroundService
                             verification.Id, verification.ChainlinkRequestId);
                     }
                 }
+
+                _healthTracker.RecordSuccess("ChainlinkResponsePoller");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -141,6 +146,7 @@ public class ChainlinkResponsePoller : BackgroundService
             }
             catch (Exception ex)
             {
+                _healthTracker.RecordFailure("ChainlinkResponsePoller", ex.Message);
                 _logger.LogError(ex, "ChainlinkResponsePoller encountered an error during poll cycle");
             }
 

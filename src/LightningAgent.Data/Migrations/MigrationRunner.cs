@@ -162,5 +162,31 @@ public class MigrationRunner
             CREATE INDEX IF NOT EXISTS IX_CcipMessages_AgentId ON CcipMessages(AgentId);
             CREATE INDEX IF NOT EXISTS IX_CcipMessages_CreatedAt ON CcipMessages(CreatedAt);
         ");
+
+        yield return ("1.8.0", "Add SpendLimits and VerificationStrategyConfig tables for VRF, Automation, and adaptive verification", @"
+            CREATE TABLE IF NOT EXISTS SpendLimits (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                AgentId INTEGER REFERENCES Agents(Id),
+                TaskId INTEGER REFERENCES Tasks(Id),
+                LimitType TEXT NOT NULL,
+                MaxSats INTEGER NOT NULL,
+                CurrentSpentSats INTEGER NOT NULL DEFAULT 0,
+                PeriodStart TEXT NOT NULL,
+                PeriodEnd TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS VerificationStrategyConfig (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                StrategyType TEXT NOT NULL,
+                ParameterName TEXT NOT NULL,
+                ParameterValue TEXT NOT NULL,
+                LearnedWeight REAL DEFAULT 1.0,
+                UpdatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_VerStrat_Type_Param ON VerificationStrategyConfig(StrategyType, ParameterName);
+        ");
+
+        yield return ("2.0.0", "Add unique constraint on Escrows.MilestoneId for idempotency protection", @"
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_Escrows_MilestoneId_Unique ON Escrows(MilestoneId);
+        ");
     }
 }

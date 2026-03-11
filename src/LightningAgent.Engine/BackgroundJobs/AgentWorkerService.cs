@@ -1,6 +1,7 @@
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Interfaces.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -17,15 +18,18 @@ public class AgentWorkerService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AgentWorkerService> _logger;
     private readonly WorkerAgentSettings _settings;
+    private readonly IServiceHealthTracker _healthTracker;
 
     public AgentWorkerService(
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerAgentSettings> settings,
-        ILogger<AgentWorkerService> logger)
+        ILogger<AgentWorkerService> logger,
+        IServiceHealthTracker healthTracker)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _settings = settings.Value;
+        _healthTracker = healthTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -79,6 +83,7 @@ public class AgentWorkerService : BackgroundService
                 });
 
                 await Task.WhenAll(agentTasks);
+                _healthTracker.RecordSuccess("AgentWorker");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -86,6 +91,7 @@ public class AgentWorkerService : BackgroundService
             }
             catch (Exception ex)
             {
+                _healthTracker.RecordFailure("AgentWorker", ex.Message);
                 _logger.LogError(ex, "AgentWorkerService encountered an error during poll cycle");
             }
 

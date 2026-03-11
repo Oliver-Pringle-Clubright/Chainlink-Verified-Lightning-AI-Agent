@@ -12,7 +12,7 @@ public class ApiKeyAuthMiddleware
 
     private const string ApiKeyHeader = "X-Api-Key";
 
-    private static readonly string[] SkipPaths = { "/api/health", "/api/auth", "/swagger", "/scalar", "/openapi", "/dashboard", "/hubs/" };
+    private static readonly string[] SkipPaths = { "/api/health", "/api/auth", "/swagger", "/scalar", "/openapi", "/dashboard" };
 
     public ApiKeyAuthMiddleware(
         RequestDelegate next,

@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.9.0**
+**Version 2.0.0**
 
 ## Table of Contents
 
@@ -126,6 +126,10 @@ dotnet test LightningAgent.sln
 ## 4. Configuration
 
 All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each section is explained below. You can also use `appsettings.Development.json` for local overrides, environment variables, or user secrets.
+
+**Startup Validation (v2.0.0):** The application validates configuration at startup. In production mode (`DevMode=false`), missing `ClaudeAi:ApiKey` or `Lightning:LndRestUrl` will halt startup with a clear error message. Other missing settings (Chainlink contract addresses, LND certificate paths) produce warnings but allow the application to start.
+
+**Automatic Network Detection (v2.0.0):** At startup the application calls `eth_chainId` on the configured `Chainlink:EthereumRpcUrl` to detect the Ethereum network automatically. If connected to mainnet, a warning is logged to alert operators.
 
 ### 4.1 Database
 
@@ -1088,6 +1092,27 @@ The following services run automatically as hosted background jobs:
 | `SecretRotationService` | Validates Claude and OpenRouter API keys every 6 hours and logs warnings for invalid keys. |
 | `TaskQueueProcessor` | Processes tasks from the background queue for asynchronous orchestration. |
 
+### Background Service Health (v2.0.0)
+
+A dedicated endpoint exposes the health status of all background services:
+
+```bash
+curl http://localhost:5000/api/health/services
+```
+
+The response is a JSON dictionary keyed by service name. Each entry tracks:
+
+| Field | Description |
+|---|---|
+| `consecutiveFailures` | Number of failures in a row since the last success. |
+| `totalFailures` | Lifetime failure count. |
+| `totalSuccesses` | Lifetime success count. |
+| `lastError` | Error message from the most recent failure (if any). |
+| `lastSuccessUtc` | Timestamp of the last successful execution. |
+| `lastFailureUtc` | Timestamp of the last failed execution. |
+
+After **3 consecutive failures**, a `CRITICAL` log alert is emitted for the affected service, making it easy to set up external log-based alerting.
+
 ### 11.4 Audit Log
 
 The system tracks all significant events through an internal audit log (stored in the `AuditLog` SQLite table). Events include task creation, agent assignments, verification results, payments, and disputes.
@@ -1701,6 +1726,13 @@ Outbound ACP requests are signed with HMAC-SHA256 using the configured `Acp:ApiK
 - Each request includes an `X-ACP-Timestamp` header (Unix seconds) and an `X-ACP-Signature` header containing the HMAC-SHA256 digest.
 - Requests are retried with exponential backoff (3 attempts: 1s, 4s, 16s) before falling back to local task ID generation.
 
+### SignalR Hub Authorization (v2.0.0)
+
+The `AgentNotificationHub` now requires authentication via the `ApiKeyAuthenticated` authorization policy. Clients must provide a valid API key (via the `X-Api-Key` header or `api_key` query string parameter) when establishing a SignalR connection.
+
+- In DevMode (`DevMode=true`), all connections are allowed -- the authentication middleware passes through without validation.
+- In production mode, unauthenticated SignalR connections are rejected with a `401 Unauthorized` response.
+
 ---
 
 ## 24. Troubleshooting
@@ -1760,6 +1792,17 @@ Outbound ACP requests are signed with HMAC-SHA256 using the configured `Acp:ApiK
 - Increase `Escrow:DefaultExpirySec` for tasks that take longer to complete.
 - Increase `Lightning:DefaultInvoiceExpirySec` to match.
 - The `EscrowExpiryChecker` background service automatically cancels expired escrows.
+
+### App Won't Start in Production
+
+- Ensure `ClaudeAi:ApiKey` and `Lightning:LndRestUrl` are configured. In production mode (`DevMode=false`), the `StartupValidator` halts startup when these values are missing and logs exactly which setting is absent.
+- Check the application logs for the specific error message emitted by the startup validator.
+
+### Background Services Failing Silently
+
+- Query `GET /api/health/services` to inspect the health of each background service.
+- Look at the `consecutiveFailures` count and `lastError` message for the affected service.
+- After 3 consecutive failures, a `CRITICAL` log alert is emitted -- search the logs for this keyword to identify recurring issues.
 
 ---
 

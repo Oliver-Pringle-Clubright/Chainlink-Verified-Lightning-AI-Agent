@@ -11,13 +11,16 @@ public class EscrowExpiryChecker : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<EscrowExpiryChecker> _logger;
+    private readonly IServiceHealthTracker _healthTracker;
 
     public EscrowExpiryChecker(
         IServiceScopeFactory scopeFactory,
-        ILogger<EscrowExpiryChecker> logger)
+        ILogger<EscrowExpiryChecker> logger,
+        IServiceHealthTracker healthTracker)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _healthTracker = healthTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -38,6 +41,8 @@ public class EscrowExpiryChecker : BackgroundService
                     _logger.LogInformation(
                         "EscrowExpiryChecker cancelled {Count} expired escrows", cancelledCount);
                 }
+
+                _healthTracker.RecordSuccess("EscrowExpiryChecker");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -46,6 +51,7 @@ public class EscrowExpiryChecker : BackgroundService
             }
             catch (Exception ex)
             {
+                _healthTracker.RecordFailure("EscrowExpiryChecker", ex.Message);
                 _logger.LogError(ex, "EscrowExpiryChecker encountered an error during check cycle");
             }
 

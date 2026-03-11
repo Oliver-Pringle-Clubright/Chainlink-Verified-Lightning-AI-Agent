@@ -13,13 +13,16 @@ public class PriceFeedRefresher : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PriceFeedRefresher> _logger;
+    private readonly IServiceHealthTracker _healthTracker;
 
     public PriceFeedRefresher(
         IServiceScopeFactory scopeFactory,
-        ILogger<PriceFeedRefresher> logger)
+        ILogger<PriceFeedRefresher> logger,
+        IServiceHealthTracker healthTracker)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _healthTracker = healthTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -89,6 +92,8 @@ public class PriceFeedRefresher : BackgroundService
                         _logger.LogWarning(ex, "PriceFeedRefresher failed to refresh LINK/ETH");
                     }
                 }
+
+                _healthTracker.RecordSuccess("PriceFeedRefresher");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -96,6 +101,7 @@ public class PriceFeedRefresher : BackgroundService
             }
             catch (Exception ex)
             {
+                _healthTracker.RecordFailure("PriceFeedRefresher", ex.Message);
                 _logger.LogWarning(
                     ex,
                     "PriceFeedRefresher encountered an error during price refresh");

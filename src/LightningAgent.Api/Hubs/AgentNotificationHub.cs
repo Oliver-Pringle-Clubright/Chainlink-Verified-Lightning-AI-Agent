@@ -1,8 +1,10 @@
 using LightningAgent.Core.Interfaces.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace LightningAgent.Api.Hubs;
 
+[Authorize(Policy = "ApiKeyAuthenticated")]
 public class AgentNotificationHub : Hub
 {
     private readonly ITaskRepository _taskRepository;

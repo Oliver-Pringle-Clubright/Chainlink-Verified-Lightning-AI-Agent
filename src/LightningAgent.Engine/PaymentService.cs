@@ -122,6 +122,7 @@ public class PaymentService : IPaymentService
             // Generate a preimage/hash pair for the payment record
             var preimage = RandomNumberGenerator.GetBytes(32);
             var paymentHash = SHA256.HashData(preimage);
+            var paymentHashHex = Convert.ToHexString(paymentHash).ToLowerInvariant();
 
             // Create a HODL invoice on our LND node for the payment
             var invoice = await _lightning.CreateHodlInvoiceAsync(
@@ -131,10 +132,30 @@ public class PaymentService : IPaymentService
                 3600,
                 ct);
 
-            payment.PaymentHash = Convert.ToHexString(paymentHash).ToLowerInvariant();
+            payment.PaymentHash = paymentHashHex;
 
-            // Settle the invoice immediately to record the payment on-chain
-            await _lightning.SettleInvoiceAsync(preimage, ct);
+            // Settle the invoice — if this fails, cancel the invoice to avoid it being stuck held
+            try
+            {
+                await _lightning.SettleInvoiceAsync(preimage, ct);
+            }
+            catch (Exception settleEx)
+            {
+                _logger.LogError(
+                    settleEx,
+                    "Settlement failed for payment {PaymentId} to agent {AgentId}, cancelling invoice",
+                    payment.Id, agentId);
+
+                try { await _lightning.CancelInvoiceAsync(paymentHash, ct); }
+                catch (Exception cancelEx)
+                {
+                    _logger.LogWarning(cancelEx, "Failed to cancel stuck invoice {PaymentHash}", paymentHashHex);
+                }
+
+                payment.Status = PaymentStatus.Failed;
+                await _paymentRepo.UpdateAsync(payment, ct);
+                return payment;
+            }
 
             payment.Status = PaymentStatus.Settled;
             payment.SettledAt = DateTime.UtcNow;

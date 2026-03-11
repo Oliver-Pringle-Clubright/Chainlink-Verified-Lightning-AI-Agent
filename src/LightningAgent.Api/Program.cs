@@ -26,6 +26,7 @@ using LightningAgent.Api.Services;
 using LightningAgent.Data.Migrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.SignalR;
 using Asp.Versioning;
 using Scalar.AspNetCore;
 
@@ -142,7 +143,21 @@ else
     builder.Services.AddAuthentication();
 }
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ApiKeyAuthenticated", policy =>
+        policy.RequireAssertion(context =>
+        {
+            var httpContext = context.Resource as HttpContext
+                ?? (context.Resource as Microsoft.AspNetCore.SignalR.HubInvocationContext)?.Context?.GetHttpContext();
+            if (httpContext is null) return false;
+
+            // Allow through if DevMode is active, admin key matched, or agent key matched
+            return httpContext.Items.ContainsKey("DevMode")
+                || httpContext.Items.ContainsKey("IsAdmin")
+                || httpContext.Items.ContainsKey("AuthenticatedAgentId");
+        }));
+});
 
 // ── Webhook Delivery ─────────────────────────────────────────
 builder.Services.AddHttpClient<WebhookDeliveryService>();
@@ -185,6 +200,9 @@ builder.Services.AddHostedService<TaskQueueProcessor>();
 
 // ── Metrics (singleton) ──────────────────────────────────────────────
 builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
+
+// ── Service Health Tracking (singleton) ─────────────────────────────
+builder.Services.AddSingleton<IServiceHealthTracker, ServiceHealthTracker>();
 
 // ── Graceful Shutdown ────────────────────────────────────────────────
 builder.Services.AddHostedService<GracefulShutdownService>();
@@ -231,6 +249,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// ── Startup configuration validation ────────────────────────────────
+{
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    StartupValidator.Validate(app.Configuration, startupLogger);
+    await StartupValidator.ValidateChainIdAsync(app.Configuration, startupLogger);
+}
 
 // ── Initialize database on startup ──────────────────────────────────
 using (var scope = app.Services.CreateScope())

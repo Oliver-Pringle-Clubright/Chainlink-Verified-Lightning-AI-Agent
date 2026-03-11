@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.9.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v2.0.0 -- comprehensive technical reference.
 
 ---
 
@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS __Migrations (
 |---------|------|-------------|
 | `1.5.0` | WebhookDeliveryLog | Creates the `WebhookDeliveryLog` table with indexes `IX_WebhookDeliveryLog_Status` and `IX_WebhookDeliveryLog_CreatedAt`. |
 | `1.6.0` | IdempotencyKeys | Creates the `IdempotencyKeys` table with index `IX_IdempotencyKeys_CreatedAt`. |
+| `1.8.0` | VrfAndMultiPriceFeed | Adds VRF consumer columns (`VrfKeyHash`, `VrfConsumerAddress`), multi-price feed columns (`EthUsdPriceFeedAddress`, `LinkUsdPriceFeedAddress`, `LinkEthPriceFeedAddress`), CCIP columns (`CcipRouterAddress`, `CcipSourceChainSelector`), and split subscription IDs (`FunctionsSubscriptionId`, `VrfSubscriptionId`). |
+| `2.0.0` | EscrowMilestoneUniqueIndex | Adds unique index on `Escrows(MilestoneId)` for idempotent escrow creation. |
 
 ---
 
@@ -1034,6 +1036,33 @@ Runs all registered ASP.NET health checks (including `ClaudeApiHealthCheck`) and
 The `ClaudeApiHealthCheck` verifies that the Claude API key is configured and that the Anthropic API is reachable. Returns `Unhealthy` if no key is set, `Degraded` if the API cannot be reached, and `Healthy` if connectivity is confirmed.
 
 **Status Codes:** `200 OK` (healthy), `503 Service Unavailable` (degraded/unhealthy)
+
+---
+
+#### `GET /api/health/services` -- Background Service Health
+
+Returns the health status of all background services tracked by `IServiceHealthTracker`.
+
+**Response:**
+```json
+{
+  "services": [
+    {
+      "serviceName": "EscrowExpiryChecker",
+      "consecutiveFailures": 0,
+      "totalFailures": 2,
+      "totalSuccesses": 1440,
+      "lastError": null,
+      "lastSuccessAt": "2026-03-11T12:00:00Z",
+      "lastFailureAt": "2026-03-10T06:15:00Z"
+    }
+  ]
+}
+```
+
+Each entry includes the service name, consecutive failure count, total failure and success counts, last error message (if any), and timestamps for the most recent success and failure. Services with 3 or more consecutive failures are flagged as `CRITICAL`.
+
+**Status Codes:** `200 OK`
 
 ---
 
@@ -1756,11 +1785,19 @@ The system uses LND HODL invoices for trustless escrow. Implemented in `Lightnin
 
 4. **Expiry**: The `EscrowExpiryChecker` background service scans for `Held` escrows where `ExpiresAt < now` and calls `CancelEscrowAsync()` for each.
 
+### Idempotency and Compensating Actions
+
+- **Idempotency guard:** `CreateEscrowAsync` checks for an existing escrow by milestone ID (via the unique index on `Escrows(MilestoneId)`) before creating a new one. If an escrow already exists for the milestone, the existing escrow is returned without creating a duplicate.
+- **Compensating action:** If the database write fails after a HODL invoice has already been created on LND, the orphaned invoice is cancelled via `ILightningClient.CancelInvoiceAsync()` to prevent funds from being held indefinitely.
+- **Payment failure handling:** `PaymentService.StreamPaymentAsync` cancels the invoice and marks the payment as `Failed` if settlement fails, ensuring no funds remain locked in a partially-settled state.
+
 ---
 
 ## 9. Background Services
 
-All background services extend `BackgroundService` and run as hosted services registered in `Program.cs`.
+All background services extend `BackgroundService` and run as hosted services registered in `Program.cs`. All background services now report health to `IServiceHealthTracker`.
+
+**Health Tracking:** Each service reports success or failure after every execution cycle. `IServiceHealthTracker` maintains a consecutive failure count per service. After **3 consecutive failures**, the service is flagged as `CRITICAL`. Health status for all services is exposed via `GET /api/health/services` (see section 3.8).
 
 | Service | Class | Interval | Purpose |
 |---------|-------|----------|---------|
@@ -1978,6 +2015,25 @@ Defined in `Directory.Build.props` and inherited by all projects:
 **Integration points:**
 - `EscrowManager` calls `PreimageProtector.Protect()` when a new preimage is generated during escrow creation
 - `TaskLifecycleWorkflow` calls `PreimageProtector.Unprotect()` to recover the plaintext preimage before settling an invoice with LND
+
+### 13.2 SignalR Hub Authentication
+
+`AgentNotificationHub` is secured with `[Authorize(Policy = "ApiKeyAuthenticated")]`. The policy requires that `HttpContext.Items["AuthenticatedAgentId"]` is present, which is set by `ApiKeyAuthMiddleware` when a valid API key is provided. In DevMode (`ApiSecurity:ApiKey` is empty), authentication is bypassed and all connections are allowed.
+
+---
+
+## 14. Startup Validation
+
+`StartupValidator.Validate()` is called during application startup to verify that all required configuration is present and valid.
+
+### Configuration Checks
+
+- **Production mode** (`DevMode=false`): Missing `ClaudeAi:ApiKey` or `Lightning:LndRestUrl` throws `InvalidOperationException`, preventing the application from starting with incomplete critical configuration.
+- **All other settings**: Logged as warnings if missing or empty. The application starts but may have degraded functionality.
+
+### Chain ID Validation
+
+`ValidateChainIdAsync()` calls `eth_chainId` on the configured Ethereum RPC endpoint (`Chainlink:EthereumRpcUrl`). It logs the detected network name (e.g., Mainnet, Sepolia, Holesky) and warns if the application is connected to mainnet, as this may have financial implications.
 
 ---
 

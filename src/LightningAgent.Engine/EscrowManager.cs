@@ -40,20 +40,28 @@ public class EscrowManager : IEscrowManager
 
     public async Task<Escrow> CreateEscrowAsync(Milestone milestone, CancellationToken ct = default)
     {
-        // Generate a random 32-byte preimage
+        // Idempotency guard: if an escrow already exists for this milestone, return it
+        var existing = await _escrowRepo.GetByMilestoneIdAsync(milestone.Id, ct);
+        if (existing is not null)
+        {
+            _logger.LogWarning(
+                "Escrow already exists for milestone {MilestoneId} (EscrowId={EscrowId}), returning existing",
+                milestone.Id, existing.Id);
+            return existing;
+        }
+
+        // 1. Generate preimage + encrypt locally (no external calls)
         var preimage = RandomNumberGenerator.GetBytes(32);
-
-        // Compute SHA256 hash of preimage (this is the payment hash)
         var paymentHash = SHA256.HashData(preimage);
-
         var paymentHashHex = Convert.ToHexString(paymentHash).ToLowerInvariant();
         var preimageHex = Convert.ToHexString(preimage).ToLowerInvariant();
+        var encryptedPreimage = Security.PreimageProtector.Protect(preimageHex);
 
         _logger.LogInformation(
             "Creating HODL invoice for milestone {MilestoneId} with {AmountSats} sats",
             milestone.Id, milestone.PayoutSats);
 
-        // Attempt to create the HODL invoice on the Lightning node.
+        // 2. Attempt to create the HODL invoice on the Lightning node.
         // If the LND call fails (e.g., no channels available), degrade gracefully
         // so the orchestration can continue; the escrow will be retried later.
         Escrow escrow;
@@ -72,7 +80,7 @@ public class EscrowManager : IEscrowManager
                 TaskId = milestone.TaskId,
                 AmountSats = milestone.PayoutSats,
                 PaymentHash = paymentHashHex,
-                PaymentPreimage = Security.PreimageProtector.Protect(preimageHex),
+                PaymentPreimage = encryptedPreimage,
                 Status = EscrowStatus.Held,
                 HodlInvoice = hodlInvoice.PaymentRequest,
                 CreatedAt = DateTime.UtcNow,
@@ -93,7 +101,7 @@ public class EscrowManager : IEscrowManager
                 TaskId = milestone.TaskId,
                 AmountSats = milestone.PayoutSats,
                 PaymentHash = paymentHashHex,
-                PaymentPreimage = Security.PreimageProtector.Protect(preimageHex),
+                PaymentPreimage = encryptedPreimage,
                 Status = EscrowStatus.PendingChannel,
                 HodlInvoice = string.Empty,
                 CreatedAt = DateTime.UtcNow,
@@ -101,8 +109,31 @@ public class EscrowManager : IEscrowManager
             };
         }
 
-        // Persist escrow
-        escrow.Id = await _escrowRepo.CreateAsync(escrow, ct);
+        // 3. Persist escrow — if this fails and we have a Held invoice on LND, cancel it
+        try
+        {
+            escrow.Id = await _escrowRepo.CreateAsync(escrow, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist escrow for milestone {MilestoneId}", milestone.Id);
+
+            // Best-effort cleanup: cancel the LND invoice if one was created
+            if (escrow.Status == EscrowStatus.Held)
+            {
+                _logger.LogWarning("Cancelling orphaned LND invoice for milestone {MilestoneId}", milestone.Id);
+                try
+                {
+                    await _lightning.CancelInvoiceAsync(Convert.FromHexString(paymentHashHex), ct);
+                }
+                catch (Exception cancelEx)
+                {
+                    _logger.LogWarning(cancelEx, "Failed to cancel orphaned invoice {PaymentHash}", paymentHashHex);
+                }
+            }
+
+            throw;
+        }
 
         // Update milestone with the payment hash
         milestone.InvoicePaymentHash = paymentHashHex;

@@ -22,13 +22,16 @@ public class VrfAuditSampler : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VrfAuditSampler> _logger;
+    private readonly IServiceHealthTracker _healthTracker;
 
     public VrfAuditSampler(
         IServiceScopeFactory scopeFactory,
-        ILogger<VrfAuditSampler> logger)
+        ILogger<VrfAuditSampler> logger,
+        IServiceHealthTracker healthTracker)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _healthTracker = healthTracker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -152,6 +155,8 @@ public class VrfAuditSampler : BackgroundService
                         "VrfAuditSampler completed audit of task {TaskId} with {MilestoneCount} milestones",
                         selectedTask.Id, milestones.Count);
                 }
+
+                _healthTracker.RecordSuccess("VrfAuditSampler");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -159,6 +164,7 @@ public class VrfAuditSampler : BackgroundService
             }
             catch (Exception ex)
             {
+                _healthTracker.RecordFailure("VrfAuditSampler", ex.Message);
                 _logger.LogWarning(
                     ex,
                     "VrfAuditSampler encountered an error during sample cycle");

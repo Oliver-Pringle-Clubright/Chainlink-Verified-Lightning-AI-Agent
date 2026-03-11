@@ -1,6 +1,6 @@
 # Chainlink-Verified-Lightning AI-Agent — Architecture & Design
 
-Version 1.9.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
+Version 2.0.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ---
 
@@ -86,6 +86,10 @@ Together these form an autonomous agent economy: agents register capabilities, t
 The full task lifecycle from arrival to payment:
 
 ```
+ 0  On startup, StartupValidator checks all required configuration (API keys,
+    LND paths, contract addresses) and detects the Ethereum network via
+    eth_chainId. Missing critical config in production mode halts startup.
+ │
  1  Task arrives (ACP protocol or REST API)
  │
  2  NaturalLanguageTaskParser (AI) converts plain English to structured AcpTaskSpec
@@ -164,8 +168,8 @@ LightningAgent.sln
 | 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification with HMAC-SHA256 request signing and retry with exponential backoff (3 attempts, 1s/4s/16s). `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
 | 6 | **LightningAgent.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). `MultiModelClient` for OpenRouter integration with task-type-based model selection and automatic fallback to Claude. Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
 | 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type, runs them concurrently via `Task.WhenAll`, and computes weighted scores using learned weights from `VerificationStrategyConfig`, returning a `VerificationPipelineResult`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
-| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PreimageProtector` for AES-256-GCM encryption of HODL preimages at rest. `PaymentService` (wired with real LND HODL invoice creation/settlement, no more simulation mode), `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. `AgentWorkerService` now uses `SemaphoreSlim`-bounded concurrent execution (configurable `MaxConcurrentAgents`). Thirteen background services. |
-| 9 | **LightningAgent.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
+| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PreimageProtector` for AES-256-GCM encryption of HODL preimages at rest. `PaymentService` (wired with real LND HODL invoice creation/settlement, no more simulation mode), `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. `StartupValidator` checks all required configuration (API keys, LND paths, contract addresses) and detects the Ethereum network via `eth_chainId` at startup. `ServiceHealthTracker` monitors consecutive failures across all background services and logs CRITICAL alerts after 3 consecutive failures. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. `AgentWorkerService` now uses `SemaphoreSlim`-bounded concurrent execution (configurable `MaxConcurrentAgents`). Thirteen background services. |
+| 9 | **LightningAgent.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries; now requires the `ApiKeyAuthenticated` authorization policy. `/api/health/services` endpoint for background service health. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
 | 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 42 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, escrow lifecycle, and end-to-end workflow orchestration. |
 
 ### Dependency Graph
@@ -239,6 +243,10 @@ The HODL invoice escrow lifecycle governs every milestone payment:
 ### Create (Lock)
 
 ```
+0. Before creating a new escrow, the system checks if one already exists for
+   the milestone and returns the existing escrow if found (idempotency guard).
+   If the DB write fails after invoice creation, the orphaned LND invoice is
+   cancelled as cleanup.
 1. EscrowManager generates 32 random bytes (preimage)
 2. Computes SHA256(preimage) → paymentHash
 2b. PreimageProtector encrypts the preimage via AES-256-GCM before database storage
@@ -409,6 +417,7 @@ Thirteen `BackgroundService` implementations run as hosted services in the ASP.N
 | **CcipMessagePoller** | Every 60 seconds | Checks pending CCIP messages by polling transaction receipts. Extracts messageId from `CCIPSendRequested` events and updates message status (`Sent` → `Delivered` or `Failed`). Times out messages older than 2 hours. |
 | **DataCleanupService** | Every 6 hours | Cleans stale data: price cache entries older than 24 hours, audit log entries older than 90 days, webhook delivery log entries older than 30 days. |
 | **GracefulShutdownService** | On shutdown | Coordinates graceful shutdown of all background services. |
+| **ServiceHealthTracker** | (singleton) | Not a background service per se. Tracks consecutive failures across all background services. After 3 consecutive failures for any service, logs a CRITICAL alert. Exposes current health status for the `/api/health/services` endpoint. |
 
 All thirteen services handle `OperationCanceledException` for graceful shutdown and log errors without crashing the host process.
 
@@ -496,6 +505,10 @@ The `SecretRotationService` background job validates keys every 6 hours and logs
 
 The `AuditLog` table records all significant events with `EventType`, `EntityType`, `EntityId`, `Details`, and `CreatedAt`. This provides a forensic trail for investigating disputes, payment discrepancies, and agent behavior anomalies.
 
+### SignalR Hub Authorization
+
+The `AgentNotificationHub` now requires the `ApiKeyAuthenticated` authorization policy, which verifies that the `AuthenticatedAgentId` is present in `HttpContext.Items` (set by `ApiKeyAuthMiddleware`). This ensures only authenticated agents can connect to the hub and receive real-time notifications. In DevMode, the middleware passes all requests through without validation, so the hub remains accessible for local development and testing.
+
 ---
 
 ## 11. Queue-Based Orchestration
@@ -565,7 +578,7 @@ The system includes a multi-stage Dockerfile (`src/LightningAgent.Api/Dockerfile
 
 ### Database Migrations
 
-The `MigrationRunner` executes versioned SQL migrations on startup. Migrations are tracked in a `__Migrations` table with version, name, and applied timestamp. Migrations include v1.1.0 (adding `WebhookUrl`, `ApiKeyHash`, and `RateLimitPerMinute` columns to the `Agents` table), subsequent migrations for analytics tables and escrow status extensions, and v1.7.0 (adding the `CcipMessages` table for cross-chain interoperability tracking).
+The `MigrationRunner` executes versioned SQL migrations on startup. Migrations are tracked in a `__Migrations` table with version, name, and applied timestamp. Migrations include v1.1.0 (adding `WebhookUrl`, `ApiKeyHash`, and `RateLimitPerMinute` columns to the `Agents` table), subsequent migrations for analytics tables and escrow status extensions, v1.7.0 (adding the `CcipMessages` table for cross-chain interoperability tracking), v1.8.0 (VRF consumer fields), and v2.0.0 (multi-price feed columns, unique constraint on `Escrows.MilestoneId`). These migrations support schema upgrades from existing databases without data loss.
 
 ### Chainlink CCIP (Cross-Chain Interoperability)
 
