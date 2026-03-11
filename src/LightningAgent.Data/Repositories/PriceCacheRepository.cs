@@ -70,6 +70,16 @@ public class PriceCacheRepository : IPriceCacheRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public async Task<int> DeleteOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM PriceCache WHERE FetchedAt < @Cutoff";
+        cmd.Parameters.AddWithValue("@Cutoff", cutoff.ToString("o"));
+
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static PriceQuote MapPriceQuote(SqliteDataReader reader)
     {
         return new PriceQuote

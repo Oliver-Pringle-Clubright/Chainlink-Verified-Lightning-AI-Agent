@@ -6,4 +6,5 @@ public interface IPriceCacheRepository
 {
     Task<PriceQuote?> GetLatestAsync(string pair, CancellationToken ct = default);
     Task<int> CreateAsync(PriceQuote quote, CancellationToken ct = default);
+    Task<int> DeleteOlderThanAsync(DateTime cutoff, CancellationToken ct = default);
 }

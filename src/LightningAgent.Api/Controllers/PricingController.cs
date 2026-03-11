@@ -1,6 +1,7 @@
 using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -9,7 +10,9 @@ namespace LightningAgent.Api.Controllers;
 /// Provides BTC/USD pricing and task cost estimation.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/pricing")]
+[Route("api/v{version:apiVersion}/pricing")]
 [Produces("application/json")]
 public class PricingController : ControllerBase
 {

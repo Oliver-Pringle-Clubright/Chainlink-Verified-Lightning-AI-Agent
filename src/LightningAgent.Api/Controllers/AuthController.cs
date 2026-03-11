@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.Authentication;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Interfaces.Data;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -10,7 +11,9 @@ namespace LightningAgent.Api.Controllers;
 /// Handles JWT token issuance and refresh for agent and admin authentication.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/auth")]
+[Route("api/v{version:apiVersion}/auth")]
 [Produces("application/json")]
 public class AuthController : ControllerBase
 {

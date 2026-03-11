@@ -26,6 +26,7 @@ using LightningAgent.Api.Services;
 using LightningAgent.Data.Migrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Asp.Versioning;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,6 +53,8 @@ builder.Services.AddScoped<ISpendLimitRepository, SpendLimitRepository>();
 builder.Services.AddScoped<IVerificationRepository, VerificationRepository>();
 builder.Services.AddScoped<IVerificationStrategyConfigRepository, VerificationStrategyConfigRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
+builder.Services.AddScoped<IWebhookLogRepository, WebhookLogRepository>();
+builder.Services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
 
 // ── Configuration sections ──────────────────────────────────────────
 builder.Services.Configure<LightningSettings>(builder.Configuration.GetSection("Lightning"));
@@ -65,6 +68,7 @@ builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection(
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));
+builder.Services.Configure<BackupSettings>(builder.Configuration.GetSection("Backup"));
 
 // ── Lightning Network ─────────────────────────────────────────────
 builder.Services.AddLightningServices(builder.Configuration);
@@ -130,6 +134,7 @@ builder.Services.AddScoped<IPricingService, PricingService>();
 builder.Services.AddScoped<ITaskOrchestrator, TaskOrchestrator>();
 builder.Services.AddScoped<IDisputeResolver, DisputeResolver>();
 builder.Services.AddScoped<IFraudDetector, FraudDetector>();
+builder.Services.AddScoped<ChannelManagerService>();
 builder.Services.AddScoped<TaskDecompositionEngine>();
 builder.Services.AddScoped<TaskLifecycleWorkflow>();
 builder.Services.AddScoped<MilestonePaymentWorkflow>();
@@ -143,6 +148,7 @@ builder.Services.AddHostedService<PriceFeedRefresher>();
 builder.Services.AddHostedService<EscrowRetryService>();
 builder.Services.AddHostedService<InvoiceStatusPoller>();
 builder.Services.AddHostedService<SecretRotationService>();
+builder.Services.AddHostedService<DataCleanupService>();
 
 // ── Task Queue (background orchestration) ────────────────────────────
 builder.Services.AddSingleton<ITaskQueue, TaskQueue>();
@@ -162,6 +168,18 @@ builder.Services.AddHealthChecks()
 // ── In-Memory Cache ─────────────────────────────────────────────────
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ICachedDataService, CachedDataService>();
+
+// ── API Versioning ───────────────────────────────────────────────────
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+}).AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
 
 // ── MVC + SignalR + Swagger ─────────────────────────────────────────
 builder.Services.AddControllers();
@@ -259,6 +277,7 @@ app.UseMiddleware<AuditLoggingMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<IdempotencyMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

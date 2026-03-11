@@ -1,5 +1,6 @@
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models.Analytics;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -8,7 +9,9 @@ namespace LightningAgent.Api.Controllers;
 /// Provides system analytics: summary, per-agent stats, and timeline data.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/analytics")]
+[Route("api/v{version:apiVersion}/analytics")]
 [Produces("application/json")]
 public class AnalyticsController : ControllerBase
 {

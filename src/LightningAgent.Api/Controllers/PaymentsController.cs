@@ -1,6 +1,7 @@
 using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -9,7 +10,9 @@ namespace LightningAgent.Api.Controllers;
 /// Provides read access to payment records.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/payments")]
+[Route("api/v{version:apiVersion}/payments")]
 [Produces("application/json")]
 public class PaymentsController : ControllerBase
 {

@@ -3,6 +3,7 @@ using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -11,7 +12,9 @@ namespace LightningAgent.Api.Controllers;
 /// Manages dispute creation and resolution.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/disputes")]
+[Route("api/v{version:apiVersion}/disputes")]
 [Produces("application/json")]
 public class DisputesController : ControllerBase
 {

@@ -225,7 +225,33 @@ public class DatabaseInitializer
                 LearnedWeight REAL DEFAULT 1.0,
                 UpdatedAt TEXT NOT NULL
             )",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS IX_VerStrat_Type_Param ON VerificationStrategyConfig(StrategyType, ParameterName)"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS IX_VerStrat_Type_Param ON VerificationStrategyConfig(StrategyType, ParameterName)",
+
+            // WebhookDeliveryLog (dead letter table for failed webhook deliveries)
+            @"CREATE TABLE IF NOT EXISTS WebhookDeliveryLog (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                WebhookUrl TEXT NOT NULL,
+                EventType TEXT NOT NULL,
+                Payload TEXT NOT NULL,
+                Attempts INTEGER NOT NULL DEFAULT 0,
+                LastAttemptAt TEXT NOT NULL,
+                Status TEXT NOT NULL DEFAULT 'Pending',
+                ErrorMessage TEXT,
+                CreatedAt TEXT NOT NULL
+            )",
+            @"CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_Status ON WebhookDeliveryLog(Status)",
+            @"CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_CreatedAt ON WebhookDeliveryLog(CreatedAt)",
+
+            // IdempotencyKeys (for deduplicating mutating HTTP requests)
+            @"CREATE TABLE IF NOT EXISTS IdempotencyKeys (
+                Key TEXT NOT NULL UNIQUE,
+                Method TEXT NOT NULL,
+                Path TEXT NOT NULL,
+                ResponseStatus INTEGER NOT NULL,
+                ResponseBody TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            )",
+            @"CREATE INDEX IF NOT EXISTS IX_IdempotencyKeys_CreatedAt ON IdempotencyKeys(CreatedAt)"
         };
 
         foreach (var sql in statements)

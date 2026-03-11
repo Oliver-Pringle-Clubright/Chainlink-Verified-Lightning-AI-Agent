@@ -106,5 +106,33 @@ public class MigrationRunner
             CREATE INDEX IF NOT EXISTS IX_Verifications_TaskId_MilestoneId ON Verifications(TaskId, MilestoneId);
             CREATE INDEX IF NOT EXISTS IX_AuditLog_CreatedAt ON AuditLog(CreatedAt);
         ");
+
+        yield return ("1.5.0", "Add WebhookDeliveryLog table for webhook retry and dead letter tracking", @"
+            CREATE TABLE IF NOT EXISTS WebhookDeliveryLog (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                WebhookUrl TEXT NOT NULL,
+                EventType TEXT NOT NULL,
+                Payload TEXT NOT NULL,
+                Attempts INTEGER NOT NULL DEFAULT 0,
+                LastAttemptAt TEXT NOT NULL,
+                Status TEXT NOT NULL DEFAULT 'Pending',
+                ErrorMessage TEXT,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_Status ON WebhookDeliveryLog(Status);
+            CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_CreatedAt ON WebhookDeliveryLog(CreatedAt);
+        ");
+
+        yield return ("1.6.0", "Add IdempotencyKeys table for deduplicating mutating HTTP requests", @"
+            CREATE TABLE IF NOT EXISTS IdempotencyKeys (
+                Key TEXT NOT NULL UNIQUE,
+                Method TEXT NOT NULL,
+                Path TEXT NOT NULL,
+                ResponseStatus INTEGER NOT NULL,
+                ResponseBody TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_IdempotencyKeys_CreatedAt ON IdempotencyKeys(CreatedAt);
+        ");
     }
 }

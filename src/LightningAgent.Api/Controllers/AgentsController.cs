@@ -5,6 +5,7 @@ using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Data;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
@@ -15,7 +16,9 @@ namespace LightningAgent.Api.Controllers;
 /// Manages agent registration, capabilities, reputation, and lifecycle.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/agents")]
+[Route("api/v{version:apiVersion}/agents")]
 [Produces("application/json")]
 public class AgentsController : ControllerBase
 {

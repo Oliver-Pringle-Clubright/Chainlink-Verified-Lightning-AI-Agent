@@ -1,4 +1,5 @@
 using LightningAgent.Data;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -8,7 +9,9 @@ namespace LightningAgent.Api.Controllers;
 /// Health check endpoints for liveness and detailed diagnostics.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/health")]
+[Route("api/v{version:apiVersion}/health")]
 [Produces("application/json")]
 public class HealthController : ControllerBase
 {

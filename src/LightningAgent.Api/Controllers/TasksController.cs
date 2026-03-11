@@ -8,6 +8,7 @@ using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Data;
 using LightningAgent.Engine.Workflows;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
@@ -19,7 +20,9 @@ namespace LightningAgent.Api.Controllers;
 /// Manages task creation, assignment, orchestration, and lifecycle.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/tasks")]
+[Route("api/v{version:apiVersion}/tasks")]
 [Produces("application/json")]
 public class TasksController : ControllerBase
 {

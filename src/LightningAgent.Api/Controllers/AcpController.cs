@@ -6,6 +6,7 @@ using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Core.Models.Acp;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
@@ -16,7 +17,9 @@ namespace LightningAgent.Api.Controllers;
 /// Agent Communication Protocol (ACP) endpoints for service discovery, task posting, negotiation, and completion.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/acp")]
+[Route("api/v{version:apiVersion}/acp")]
 [Produces("application/json")]
 public class AcpController : ControllerBase
 {

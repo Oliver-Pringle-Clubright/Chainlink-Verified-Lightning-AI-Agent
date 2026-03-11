@@ -1,5 +1,6 @@
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
@@ -9,7 +10,9 @@ namespace LightningAgent.Api.Controllers;
 /// Provides a comprehensive system statistics dashboard.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/stats")]
+[Route("api/v{version:apiVersion}/stats")]
 [Produces("application/json")]
 public class StatsController : ControllerBase
 {

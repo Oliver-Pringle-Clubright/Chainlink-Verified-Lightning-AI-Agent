@@ -1,6 +1,6 @@
 # Chainlink-Verified-Lightning AI-Agent — Architecture & Design
 
-Version 1.3.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
+Version 1.5.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ---
 

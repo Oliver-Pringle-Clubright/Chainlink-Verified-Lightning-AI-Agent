@@ -5,6 +5,7 @@ using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Engine.Workflows;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -13,7 +14,9 @@ namespace LightningAgent.Api.Controllers;
 /// Manages milestone retrieval, output submission, and verification.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/milestones")]
+[Route("api/v{version:apiVersion}/milestones")]
 [Produces("application/json")]
 public class MilestonesController : ControllerBase
 {

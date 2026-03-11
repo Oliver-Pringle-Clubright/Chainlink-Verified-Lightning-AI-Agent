@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Configuration;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -10,7 +11,9 @@ namespace LightningAgent.Api.Controllers;
 /// Admin-only endpoints for rotating API keys and checking key validity.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/secrets")]
+[Route("api/v{version:apiVersion}/secrets")]
 [Produces("application/json")]
 public class SecretsController : ControllerBase
 {

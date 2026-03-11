@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.3.0**
+**Version 1.5.0**
 
 ## Table of Contents
 
@@ -20,8 +20,14 @@
 14. [Analytics](#14-analytics)
 15. [Secret Management](#15-secret-management)
 16. [Task Queue & Retry](#16-task-queue--retry)
-17. [Troubleshooting](#17-troubleshooting)
-18. [Docker Deployment](#18-docker-deployment)
+17. [Audit Log Administration](#17-audit-log-administration)
+18. [Data Export](#18-data-export)
+19. [Database Backup & Restore](#19-database-backup--restore)
+20. [Idempotency](#20-idempotency)
+21. [API Versioning](#21-api-versioning)
+22. [Stale Data Cleanup](#22-stale-data-cleanup)
+23. [Troubleshooting](#23-troubleshooting)
+24. [Docker Deployment](#24-docker-deployment)
 
 ---
 
@@ -795,6 +801,8 @@ Each webhook delivery includes:
 - **Body**: JSON payload with event data (same structure as SignalR events)
 - **Header**: `X-Webhook-Event` with the event type (e.g., `TaskAssigned`, `PaymentSent`)
 
+**Retry with exponential backoff:** If a webhook delivery fails (non-2xx response or timeout), the system retries with exponential backoff at intervals of 1 second, 4 seconds, and 16 seconds. After all retry attempts are exhausted, the failed delivery is moved to a **dead letter queue** for manual inspection and replay.
+
 ---
 
 ## 8. Dispute Resolution
@@ -1351,7 +1359,207 @@ This finds all milestones with `Failed` status on the task and its subtasks, res
 
 ---
 
-## 17. Troubleshooting
+## 17. Audit Log Administration
+
+The audit log administration endpoints allow administrators to query and inspect the system's audit trail. All endpoints require admin authentication.
+
+### 17.1 List Audit Log Entries
+
+Retrieve a paginated list of audit log entries with optional filters:
+
+```bash
+curl "http://localhost:5000/api/admin/audit?page=1&pageSize=20&agentId=1&action=TaskCreated&startDate=2026-01-01&endDate=2026-03-11" \
+  -H "X-Api-Key: your-admin-key"
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `page` | int | Page number (default: 1) |
+| `pageSize` | int | Items per page (default: 20) |
+| `agentId` | int | Filter by agent ID |
+| `action` | string | Filter by action type (e.g., `TaskCreated`, `PaymentSent`) |
+| `startDate` | date | Filter entries on or after this date |
+| `endDate` | date | Filter entries on or before this date |
+
+### 17.2 Get a Single Audit Log Entry
+
+```bash
+curl http://localhost:5000/api/admin/audit/42 \
+  -H "X-Api-Key: your-admin-key"
+```
+
+### 17.3 Get Audit Log Entries by Agent
+
+```bash
+curl http://localhost:5000/api/admin/audit/agent/1 \
+  -H "X-Api-Key: your-admin-key"
+```
+
+Returns all audit log entries associated with the specified agent.
+
+---
+
+## 18. Data Export
+
+The data export endpoints allow administrators to download system data in JSON or CSV format. All endpoints require admin authentication and return file downloads.
+
+### 18.1 Export Tasks
+
+```bash
+# Export as JSON
+curl -O http://localhost:5000/api/admin/export/tasks?format=json \
+  -H "X-Api-Key: your-admin-key"
+
+# Export as CSV
+curl -O http://localhost:5000/api/admin/export/tasks?format=csv \
+  -H "X-Api-Key: your-admin-key"
+```
+
+### 18.2 Export Payments
+
+```bash
+curl -O "http://localhost:5000/api/admin/export/payments?format=json" \
+  -H "X-Api-Key: your-admin-key"
+
+curl -O "http://localhost:5000/api/admin/export/payments?format=csv" \
+  -H "X-Api-Key: your-admin-key"
+```
+
+### 18.3 Export Agents
+
+```bash
+curl -O "http://localhost:5000/api/admin/export/agents?format=json" \
+  -H "X-Api-Key: your-admin-key"
+
+curl -O "http://localhost:5000/api/admin/export/agents?format=csv" \
+  -H "X-Api-Key: your-admin-key"
+```
+
+### 18.4 Export Audit Log
+
+```bash
+# Export last 30 days of audit log entries (default)
+curl -O "http://localhost:5000/api/admin/export/audit?format=json&days=30" \
+  -H "X-Api-Key: your-admin-key"
+
+curl -O "http://localhost:5000/api/admin/export/audit?format=csv&days=30" \
+  -H "X-Api-Key: your-admin-key"
+```
+
+The `days` parameter controls how many days of audit log history to include in the export. Default: `30`.
+
+---
+
+## 19. Database Backup & Restore
+
+The database backup and restore endpoints allow administrators to manage SQLite database backups. All endpoints require admin authentication.
+
+### 19.1 Create a Backup
+
+```bash
+curl -X POST http://localhost:5000/api/admin/backup \
+  -H "X-Api-Key: your-admin-key"
+```
+
+Creates a database backup using SQLite's `VACUUM INTO` command, producing a consistent snapshot of the database file.
+
+### 19.2 List Available Backups
+
+```bash
+curl http://localhost:5000/api/admin/backups \
+  -H "X-Api-Key: your-admin-key"
+```
+
+Returns a list of all available backup files with their names, sizes, and creation timestamps.
+
+### 19.3 Restore from Backup
+
+```bash
+curl -X POST http://localhost:5000/api/admin/backup/restore \
+  -H "X-Api-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{ "backupName": "lightningagent-2026-03-11T120000.db" }'
+```
+
+Restores the database from the named backup file. **Important:** The application must be restarted after a restore operation for the changes to take effect.
+
+---
+
+## 20. Idempotency
+
+The system supports idempotent requests for `POST`, `PUT`, and `PATCH` operations. This prevents duplicate side effects when a client retries a request due to network issues or timeouts.
+
+### 20.1 Using Idempotency Keys
+
+Add the `Idempotency-Key` header to any `POST`, `PUT`, or `PATCH` request:
+
+```bash
+curl -X POST http://localhost:5000/api/tasks \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-request-id-12345" \
+  -d '{
+    "title": "Build a REST API",
+    "taskType": "Code",
+    "maxPayoutSats": 10000
+  }'
+```
+
+### 20.2 How It Works
+
+- When a request includes an `Idempotency-Key` header, the system checks whether a response for that key has already been stored.
+- If a matching key is found, the **cached response** is returned immediately without re-executing the operation.
+- If no matching key exists, the request is processed normally and the response is stored for future duplicate detection.
+- Idempotency keys are stored in the `IdempotencyKeys` table in the database.
+
+---
+
+## 21. API Versioning
+
+The API supports URL-based versioning using `Asp.Versioning.Mvc`.
+
+### 21.1 Versioned Endpoints
+
+All endpoints support an optional `/api/v1/` prefix. For example:
+
+```bash
+# Both of these are equivalent
+curl http://localhost:5000/api/health
+curl http://localhost:5000/api/v1/health
+
+# Versioned task creation
+curl -X POST http://localhost:5000/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "My task", "taskType": "Code", "maxPayoutSats": 5000 }'
+```
+
+### 21.2 Default Version
+
+The default API version is **1.0**. When no version prefix is included in the URL, the request is routed to version 1.0 automatically.
+
+---
+
+## 22. Stale Data Cleanup
+
+The `DataCleanupService` is a background service that automatically removes stale data from the system to prevent unbounded growth.
+
+### 22.1 How It Works
+
+- The service runs every **6 hours** on an automatic schedule.
+- No configuration is needed -- the service starts automatically with the application.
+
+### 22.2 What Gets Cleaned
+
+| Data | Retention Period |
+|---|---|
+| Price cache entries | 24 hours |
+| Audit log entries | 90 days |
+| Webhook log entries | 30 days |
+
+Expired entries are deleted permanently during each cleanup cycle.
+
+---
+
+## 23. Troubleshooting
 
 ### "LND connection refused"
 
@@ -1411,7 +1619,7 @@ This finds all milestones with `Failed` status on the task and its subtasks, res
 
 ---
 
-## 18. Docker Deployment
+## 24. Docker Deployment
 
 ### Quick Start with Docker Compose
 
@@ -1489,4 +1697,14 @@ environment:
 | `POST` | `/api/secrets/rotate/claude` | Rotate Claude API key (admin only) |
 | `POST` | `/api/secrets/rotate/openrouter` | Rotate OpenRouter API key (admin only) |
 | `GET` | `/api/secrets/status` | Check API key validity (admin only) |
+| `GET` | `/api/admin/audit` | Paginated audit log entries (admin only) |
+| `GET` | `/api/admin/audit/{id}` | Single audit log entry (admin only) |
+| `GET` | `/api/admin/audit/agent/{agentId}` | Audit log entries by agent (admin only) |
+| `GET` | `/api/admin/export/tasks` | Export tasks as JSON or CSV (admin only) |
+| `GET` | `/api/admin/export/payments` | Export payments as JSON or CSV (admin only) |
+| `GET` | `/api/admin/export/agents` | Export agents as JSON or CSV (admin only) |
+| `GET` | `/api/admin/export/audit` | Export audit log as JSON or CSV (admin only) |
+| `POST` | `/api/admin/backup` | Create database backup (admin only) |
+| `GET` | `/api/admin/backups` | List available backups (admin only) |
+| `POST` | `/api/admin/backup/restore` | Restore database from backup (admin only) |
 | `GET` | `/dashboard` | Dashboard UI redirect |

@@ -1,6 +1,7 @@
 using System.Text;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models.Metrics;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
@@ -9,7 +10,9 @@ namespace LightningAgent.Api.Controllers;
 /// Exposes application metrics in JSON and Prometheus formats.
 /// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/metrics")]
+[Route("api/v{version:apiVersion}/metrics")]
 [Produces("application/json")]
 public class MetricsController : ControllerBase
 {

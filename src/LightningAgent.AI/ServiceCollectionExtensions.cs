@@ -38,6 +38,12 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<MultiModelClient>(client =>
         {
             client.Timeout = TimeSpan.FromMinutes(2);
+        })
+        .AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(5);
         });
 
         services.AddScoped<INaturalLanguageTaskParser, NaturalLanguageTaskParser>();

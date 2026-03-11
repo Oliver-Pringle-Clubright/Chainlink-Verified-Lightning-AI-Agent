@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.3.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.5.0 -- comprehensive technical reference.
 
 ---
 
@@ -25,6 +25,7 @@
 | Coverage | Coverlet | 6.0.4 |
 | Resilience | Polly (via Microsoft.Extensions.Http.Resilience) | 10.0.0-preview |
 | Containerization | Docker | Multi-stage build (.NET 10 SDK + ASP.NET runtime) |
+| API Versioning | Asp.Versioning.Mvc | 8.1.0 |
 
 ---
 
@@ -285,7 +286,46 @@ CREATE TABLE IF NOT EXISTS SpendLimits (
 );
 ```
 
-### 2.13 VerificationStrategyConfig
+### 2.13 WebhookDeliveryLog
+
+```sql
+CREATE TABLE IF NOT EXISTS WebhookDeliveryLog (
+    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    WebhookUrl    TEXT    NOT NULL,
+    EventType     TEXT    NOT NULL,
+    Payload       TEXT    NOT NULL,
+    Attempts      INTEGER NOT NULL DEFAULT 0,
+    LastAttemptAt TEXT,
+    Status        TEXT    NOT NULL DEFAULT 'Pending',
+    ErrorMessage  TEXT,
+    CreatedAt     TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_Status
+    ON WebhookDeliveryLog(Status);
+CREATE INDEX IF NOT EXISTS IX_WebhookDeliveryLog_CreatedAt
+    ON WebhookDeliveryLog(CreatedAt);
+```
+
+**Status values:** `Pending`, `Delivered`, `Failed`
+
+### 2.14 IdempotencyKeys
+
+```sql
+CREATE TABLE IF NOT EXISTS IdempotencyKeys (
+    Key            TEXT PRIMARY KEY UNIQUE,
+    Method         TEXT NOT NULL,
+    Path           TEXT NOT NULL,
+    ResponseStatus INTEGER NOT NULL,
+    ResponseBody   TEXT,
+    CreatedAt      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS IX_IdempotencyKeys_CreatedAt
+    ON IdempotencyKeys(CreatedAt);
+```
+
+### 2.15 VerificationStrategyConfig
 
 ```sql
 CREATE TABLE IF NOT EXISTS VerificationStrategyConfig (
@@ -301,7 +341,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS IX_VerStrat_Type_Param
     ON VerificationStrategyConfig(StrategyType, ParameterName);
 ```
 
-### 2.14 __Migrations
+### 2.16 __Migrations
 
 ```sql
 CREATE TABLE IF NOT EXISTS __Migrations (
@@ -312,11 +352,18 @@ CREATE TABLE IF NOT EXISTS __Migrations (
 );
 ```
 
+#### Registered Migrations
+
+| Version | Name | Description |
+|---------|------|-------------|
+| `1.5.0` | WebhookDeliveryLog | Creates the `WebhookDeliveryLog` table with indexes `IX_WebhookDeliveryLog_Status` and `IX_WebhookDeliveryLog_CreatedAt`. |
+| `1.6.0` | IdempotencyKeys | Creates the `IdempotencyKeys` table with index `IX_IdempotencyKeys_CreatedAt`. |
+
 ---
 
 ## 3. API Reference
 
-All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `CorrelationIdMiddleware` (reads/generates `X-Correlation-Id`), `ApiKeyAuthMiddleware` (multi-tenant: global key or per-agent SHA256-hashed key, skipped for `/api/health` and `/swagger`), `RateLimitingMiddleware` (per-agent rate from DB, fallback 100 req/min per IP), `AuditLoggingMiddleware` (captures all API calls to the `AuditLog` table, skipping health/swagger/SignalR/static file paths). After middleware, `UseAuthentication()` and `UseAuthorization()` run for JWT bearer validation when configured.
+All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `CorrelationIdMiddleware` (reads/generates `X-Correlation-Id`), `ApiKeyAuthMiddleware` (multi-tenant: global key or per-agent SHA256-hashed key, skipped for `/api/health` and `/swagger`), `RateLimitingMiddleware` (per-agent rate from DB, fallback 100 req/min per IP), `IdempotencyMiddleware` (deduplicates POST/PUT/PATCH requests using the `Idempotency-Key` header; cached responses are stored in the `IdempotencyKeys` table and replayed for duplicate requests within the key's lifetime), `AuditLoggingMiddleware` (captures all API calls to the `AuditLog` table, skipping health/swagger/SignalR/static file paths). After middleware, `UseAuthentication()` and `UseAuthorization()` run for JWT bearer validation when configured.
 
 ### 3.1 Tasks API
 
@@ -1211,6 +1258,119 @@ Returns aggregate statistics for the entire marketplace.
 
 ---
 
+### 3.16 Admin Audit API
+
+#### `GET /api/admin/audit` -- Paginated Audit Log
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | `1` | Page number |
+| `pageSize` | int | `50` | Items per page |
+| `eventType` | string | *(all)* | Filter by event type |
+| `entityType` | string | *(all)* | Filter by entity type |
+| `from` | datetime | *(none)* | Start date filter |
+| `to` | datetime | *(none)* | End date filter |
+
+**Response:** Paginated `List<AuditLogEntry>` with `totalCount`, `page`, `pageSize`.
+
+**Status Codes:** `200 OK`
+
+---
+
+#### `GET /api/admin/audit/{id}` -- Get Audit Log Entry
+
+**Path Parameters:** `id` (int)
+
+**Response:** `AuditLogEntry`
+
+**Status Codes:** `200 OK`, `404 Not Found`
+
+---
+
+#### `GET /api/admin/audit/agent/{agentId}` -- Get Audit Log by Agent
+
+**Path Parameters:** `agentId` (int)
+
+Returns all audit log entries associated with a specific agent, ordered by `CreatedAt` descending.
+
+**Response:** `List<AuditLogEntry>`
+
+**Status Codes:** `200 OK`
+
+---
+
+### 3.17 Admin Export API
+
+#### `GET /api/admin/export/tasks` -- Export Tasks
+#### `GET /api/admin/export/payments` -- Export Payments
+#### `GET /api/admin/export/agents` -- Export Agents
+#### `GET /api/admin/export/audit` -- Export Audit Log
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `format` | string | `json` | Export format: `json` or `csv` |
+
+Returns a downloadable file with all records of the specified entity type.
+
+**Status Codes:** `200 OK`
+
+---
+
+### 3.18 Admin Backup API
+
+#### `POST /api/admin/backup` -- Create Database Backup
+
+Executes SQLite `VACUUM INTO` to create a consistent backup of the database.
+
+**Response:**
+```json
+{
+  "filename": "backup_2026-03-11T12-00-00.db",
+  "message": "Backup created successfully."
+}
+```
+
+**Status Codes:** `200 OK`, `500 Internal Server Error`
+
+---
+
+#### `GET /api/admin/backups` -- List Backups
+
+Returns a list of available database backup files.
+
+**Response:** `List<BackupInfo>` with `filename`, `sizeBytes`, `createdAt`.
+
+**Status Codes:** `200 OK`
+
+---
+
+#### `POST /api/admin/backup/restore` -- Restore Database from Backup
+
+**Request Body:**
+```json
+{
+  "filename": "backup_2026-03-11T12-00-00.db"
+}
+```
+
+**Status Codes:** `200 OK`, `400 Bad Request`, `404 Not Found`
+
+---
+
+### 3.19 Channels API
+
+#### `GET /api/channels` -- List Lightning Channels
+
+Returns the list of open Lightning Network channels from the connected LND node.
+
+**Response:** `List<ChannelInfo>` with `channelId`, `remotePubkey`, `capacity`, `localBalance`, `remoteBalance`, `active`.
+
+**Status Codes:** `200 OK`
+
+---
+
 ## 4. Configuration Reference
 
 Configuration is read from `appsettings.json` (and environment-specific overrides) and bound to strongly-typed settings classes via `IOptions<T>`.
@@ -1552,12 +1712,53 @@ All background services extend `BackgroundService` and run as hosted services re
 | **InvoiceStatusPoller** | `LightningAgent.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |
 | **SecretRotationService** | `LightningAgent.Engine.Services.SecretRotationService` | 6 hours | Validates Claude and OpenRouter API keys by issuing lightweight requests to `GET /v1/models` (Anthropic) and `GET /models` (OpenRouter). Logs warnings when keys are invalid (HTTP 401) or unreachable. |
 | **TaskQueueProcessor** | `LightningAgent.Engine.Queue.TaskQueueProcessor` | Continuous | Dequeues task IDs from `ITaskQueue` (backed by `System.Threading.Channels.Channel<int>`) and orchestrates each via `ITaskOrchestrator.OrchestrateTaskAsync()` inside a fresh DI scope. |
+| **DataCleanupService** | `LightningAgent.Engine.BackgroundJobs.DataCleanupService` | 6 hours | Cleans stale data: price cache entries older than 24 hours, audit log entries older than 90 days, and webhook delivery log entries older than 30 days. |
 
 All services use graceful shutdown: they catch `OperationCanceledException` when the `stoppingToken` is cancelled and exit cleanly. Services that require scoped dependencies (repositories, clients) create a scope via `IServiceScopeFactory`.
 
 ---
 
-## 10. External Dependencies
+## 10. Webhook Retry Strategy
+
+Webhook deliveries use exponential backoff with a dead letter queue stored in the `WebhookDeliveryLog` table.
+
+### Retry Schedule
+
+| Attempt | Delay | Cumulative |
+|---------|-------|------------|
+| 1 | 1 second | 1s |
+| 2 | 4 seconds | 5s |
+| 3 | 16 seconds | 21s |
+
+Maximum of **3 retry attempts** per delivery. The backoff formula is `delay = 4^(attempt-1)` seconds (1s, 4s, 16s).
+
+### Status Transitions
+
+```
++----------+       Success        +-----------+
+| Pending  | ------------------> | Delivered |
++----+-----+                     +-----------+
+     |
+     | Failure (attempt < 3)
+     |   -> increment Attempts
+     |   -> schedule retry with backoff
+     |
+     | Failure (attempt = 3)
+     v
++---------+
+| Failed  |  (dead letter queue)
++---------+
+```
+
+- **Pending**: Initial state when a webhook delivery is created.
+- **Delivered**: The webhook was successfully delivered (HTTP 2xx response).
+- **Failed**: All retry attempts exhausted; the delivery is placed in the dead letter queue for manual inspection via `WebhookDeliveryLog`.
+
+The `ErrorMessage` column captures the last failure reason (e.g., HTTP status code, timeout, connection refused).
+
+---
+
+## 11. External Dependencies
 
 ### NuGet Packages
 
@@ -1625,7 +1826,7 @@ All services use graceful shutdown: they catch `OperationCanceledException` when
 
 ---
 
-## 11. Project Dependencies
+## 12. Project Dependencies
 
 The solution contains 10 projects across 2 solution folders (`src/` and `tests/`).
 
