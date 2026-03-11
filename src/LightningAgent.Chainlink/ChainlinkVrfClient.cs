@@ -36,7 +36,7 @@ public class ChainlinkVrfClient : IChainlinkVrfClient
 
         // Default key hash (can be made configurable)
         var keyHash = new byte[32];
-        var subscriptionId = (ulong)_settings.SubscriptionId;
+        var subscriptionId = BigInteger.Parse(_settings.SubscriptionId);
         ushort requestConfirmations = 3;
         uint callbackGasLimit = 100_000;
 

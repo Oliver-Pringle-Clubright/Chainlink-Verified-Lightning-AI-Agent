@@ -40,11 +40,11 @@ public class ChainlinkPriceFeedClient : IChainlinkPriceFeedClient
 
         var priceFeed = new PriceFeedData
         {
-            RoundId = (long)roundData.RoundId,
+            RoundId = roundData.RoundId.ToString(),
             Answer = answer,
             StartedAt = DateTimeOffset.FromUnixTimeSeconds((long)roundData.StartedAt).UtcDateTime,
             UpdatedAt = DateTimeOffset.FromUnixTimeSeconds((long)roundData.UpdatedAt).UtcDateTime,
-            AnsweredInRound = (long)roundData.AnsweredInRound
+            AnsweredInRound = roundData.AnsweredInRound.ToString()
         };
 
         _logger.LogInformation("Price feed {Address}: {Price} (round {RoundId})",

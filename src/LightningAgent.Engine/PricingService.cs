@@ -56,8 +56,8 @@ public class PricingService : IPricingService
         var feedData = await _priceFeed.GetLatestPriceAsync(
             _chainlinkSettings.BtcUsdPriceFeedAddress, ct);
 
-        // Chainlink BTC/USD feeds typically have 8 decimal places
-        double price = (double)(feedData.Answer / 100_000_000m);
+        // feedData.Answer is already divided by 10^decimals in the price feed client
+        double price = (double)feedData.Answer;
 
         _logger.LogInformation(
             "Chainlink BTC/USD price: ${Price:F2} (roundId={RoundId})",

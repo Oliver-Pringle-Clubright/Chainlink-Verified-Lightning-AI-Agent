@@ -66,7 +66,7 @@ public class ChainlinkFunctionsClient : IChainlinkFunctionsClient
             (ulong)0,
             request.Args?.ToArray() ?? Array.Empty<string>(),
             Array.Empty<byte[]>(),
-            (ulong)request.SubscriptionId,
+            System.Numerics.BigInteger.Parse(request.SubscriptionId),
             (uint)request.CallbackGasLimit,
             donIdBytes
         );
