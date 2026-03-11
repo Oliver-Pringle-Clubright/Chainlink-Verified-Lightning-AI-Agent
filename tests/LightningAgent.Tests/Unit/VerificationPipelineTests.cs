@@ -1,5 +1,6 @@
 using FluentAssertions;
 using LightningAgent.Core.Enums;
+using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Verification;
@@ -11,10 +12,14 @@ namespace LightningAgent.Tests.Unit;
 public class VerificationPipelineTests
 {
     private readonly ILogger<VerificationPipeline> _logger;
+    private readonly IVerificationStrategyConfigRepository _configRepo;
 
     public VerificationPipelineTests()
     {
         _logger = Substitute.For<ILogger<VerificationPipeline>>();
+        _configRepo = Substitute.For<IVerificationStrategyConfigRepository>();
+        _configRepo.GetByStrategyTypeAsync(Arg.Any<VerificationStrategyType>(), Arg.Any<CancellationToken>())
+            .Returns(new List<VerificationStrategyParam>());
     }
 
     [Fact]
@@ -33,15 +38,15 @@ public class VerificationPipelineTests
         strategy2.VerifyAsync(Arg.Any<Milestone>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>())
             .Returns(new VerificationResult(0.85, true, "Passed", VerificationStrategyType.AiJudge));
 
-        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2 }, _logger);
+        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2 }, _configRepo, _logger);
 
         var milestone = CreateMilestone("""{"taskType": "Code"}""");
 
         // Act
-        var results = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
+        var pipelineResult = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
 
         // Assert: both strategies ran
-        results.Should().HaveCount(2);
+        pipelineResult.Results.Should().HaveCount(2);
         await strategy1.Received(1).VerifyAsync(Arg.Any<Milestone>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
         await strategy2.Received(1).VerifyAsync(Arg.Any<Milestone>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
     }
@@ -60,16 +65,16 @@ public class VerificationPipelineTests
         strategy2.CanHandle(TaskType.Code).Returns(false);
         strategy2.StrategyType.Returns(VerificationStrategyType.TextSimilarity);
 
-        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2 }, _logger);
+        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2 }, _configRepo, _logger);
 
         var milestone = CreateMilestone("""{"taskType": "Code"}""");
 
         // Act
-        var results = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
+        var pipelineResult = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
 
         // Assert: only strategy1 ran
-        results.Should().HaveCount(1);
-        results[0].StrategyType.Should().Be(VerificationStrategyType.CodeCompile);
+        pipelineResult.Results.Should().HaveCount(1);
+        pipelineResult.Results[0].StrategyType.Should().Be(VerificationStrategyType.CodeCompile);
         await strategy2.DidNotReceive().VerifyAsync(Arg.Any<Milestone>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
     }
 
@@ -93,18 +98,18 @@ public class VerificationPipelineTests
         strategy3.CanHandle(TaskType.Text).Returns(false);
         strategy3.StrategyType.Returns(VerificationStrategyType.CodeCompile);
 
-        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2, strategy3 }, _logger);
+        var pipeline = new VerificationPipeline(new[] { strategy1, strategy2, strategy3 }, _configRepo, _logger);
 
         // VerificationCriteria is empty/null so defaults to Text
         var milestone = CreateMilestone("");
 
         // Act
-        var results = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
+        var pipelineResult = await pipeline.RunVerificationAsync(milestone, new byte[] { 1, 2, 3 });
 
         // Assert: results from both applicable strategies
-        results.Should().HaveCount(2);
-        results.Should().Contain(r => r.StrategyType == VerificationStrategyType.TextSimilarity && r.Passed);
-        results.Should().Contain(r => r.StrategyType == VerificationStrategyType.AiJudge && !r.Passed);
+        pipelineResult.Results.Should().HaveCount(2);
+        pipelineResult.Results.Should().Contain(r => r.StrategyType == VerificationStrategyType.TextSimilarity && r.Passed);
+        pipelineResult.Results.Should().Contain(r => r.StrategyType == VerificationStrategyType.AiJudge && !r.Passed);
     }
 
     private static Milestone CreateMilestone(string verificationCriteria) => new()

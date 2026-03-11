@@ -63,6 +63,13 @@ builder.Services.Configure<ChainlinkSettings>(builder.Configuration.GetSection("
 builder.Services.Configure<AcpSettings>(builder.Configuration.GetSection("Acp"));
 builder.Services.Configure<ClaudeAiSettings>(builder.Configuration.GetSection("ClaudeAi"));
 builder.Services.Configure<EscrowSettings>(builder.Configuration.GetSection("Escrow"));
+
+var escrowSettings = builder.Configuration.GetSection("Escrow").Get<EscrowSettings>();
+if (escrowSettings is not null && !string.IsNullOrWhiteSpace(escrowSettings.EncryptionKey))
+{
+    LightningAgent.Engine.Security.PreimageProtector.Initialize(escrowSettings.EncryptionKey);
+}
+
 builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pricing"));
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));

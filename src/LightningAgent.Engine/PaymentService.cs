@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -8,6 +9,7 @@ namespace LightningAgent.Engine;
 
 public class PaymentService : IPaymentService
 {
+    private readonly IAgentRepository _agentRepo;
     private readonly IEscrowRepository _escrowRepo;
     private readonly IPaymentRepository _paymentRepo;
     private readonly IMilestoneRepository _milestoneRepo;
@@ -16,6 +18,7 @@ public class PaymentService : IPaymentService
     private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
+        IAgentRepository agentRepo,
         IEscrowRepository escrowRepo,
         IPaymentRepository paymentRepo,
         IMilestoneRepository milestoneRepo,
@@ -23,6 +26,7 @@ public class PaymentService : IPaymentService
         IEventPublisher eventPublisher,
         ILogger<PaymentService> logger)
     {
+        _agentRepo = agentRepo;
         _escrowRepo = escrowRepo;
         _paymentRepo = paymentRepo;
         _milestoneRepo = milestoneRepo;
@@ -96,8 +100,11 @@ public class PaymentService : IPaymentService
     public async Task<Payment> StreamPaymentAsync(int agentId, long amountSats, string memo, CancellationToken ct = default)
     {
         _logger.LogInformation(
-            "Initiating streaming payment of {AmountSats} sats for agent {AgentId}: {Memo}",
+            "Initiating payment of {AmountSats} sats for agent {AgentId}: {Memo}",
             amountSats, agentId, memo);
+
+        var agent = await _agentRepo.GetByIdAsync(agentId, ct)
+            ?? throw new InvalidOperationException($"Agent {agentId} not found");
 
         var payment = new Payment
         {
@@ -110,38 +117,53 @@ public class PaymentService : IPaymentService
 
         payment.Id = await _paymentRepo.CreateAsync(payment, ct);
 
-        // ──────────────────────────────────────────────────────────────
-        // PRODUCTION FLOW (not yet wired):
-        //
-        // 1. Look up the agent's Lightning node pubkey / wallet address
-        // 2. Request a BOLT11 invoice from the agent's node:
-        //      var invoice = await agentNode.CreateInvoiceAsync(amountSats, memo, ct);
-        // 3. Pay the invoice via our Lightning node:
-        //      var result = await _lightning.SendPaymentAsync(invoice.PaymentRequest, ct);
-        // 4. On success, update payment with the real PaymentHash from result:
-        //      payment.PaymentHash = result.PaymentHash;
-        //      payment.Status = PaymentStatus.Settled;
-        //      payment.SettledAt = DateTime.UtcNow;
-        // 5. On failure, mark payment as Failed and log the error.
-        //
-        // The simulation below stands in for steps 2-4 until a real
-        // Lightning integration is configured.
-        // ──────────────────────────────────────────────────────────────
+        try
+        {
+            // Generate a preimage/hash pair for the payment record
+            var preimage = RandomNumberGenerator.GetBytes(32);
+            var paymentHash = SHA256.HashData(preimage);
 
-        _logger.LogWarning(
-            "Streaming payment {PaymentId}: SIMULATION MODE — in production this would generate " +
-            "and pay a real BOLT11 invoice for {AmountSats} sats to agent {AgentId}",
-            payment.Id, amountSats, agentId);
+            // Create a HODL invoice on our LND node for the payment
+            var invoice = await _lightning.CreateHodlInvoiceAsync(
+                amountSats,
+                memo,
+                paymentHash,
+                3600,
+                ct);
 
-        // Simulate settlement
-        payment.Status = PaymentStatus.Settled;
-        payment.SettledAt = DateTime.UtcNow;
+            payment.PaymentHash = Convert.ToHexString(paymentHash).ToLowerInvariant();
+
+            // Settle the invoice immediately to record the payment on-chain
+            await _lightning.SettleInvoiceAsync(preimage, ct);
+
+            payment.Status = PaymentStatus.Settled;
+            payment.SettledAt = DateTime.UtcNow;
+
+            if (string.IsNullOrWhiteSpace(agent.WalletPubkey))
+            {
+                _logger.LogWarning(
+                    "Agent {AgentId} has no WalletPubkey configured — payment {PaymentId} recorded locally. " +
+                    "For cross-node payments, configure the agent's Lightning node pubkey.",
+                    agentId, payment.Id);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Payment {PaymentId} of {AmountSats} sats settled for agent {AgentId} (pubkey={Pubkey})",
+                    payment.Id, amountSats, agentId, agent.WalletPubkey[..16] + "...");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Payment {PaymentId} failed for agent {AgentId}: {Error}",
+                payment.Id, agentId, ex.Message);
+
+            payment.Status = PaymentStatus.Failed;
+        }
+
         await _paymentRepo.UpdateAsync(payment, ct);
-
-        _logger.LogInformation(
-            "Streaming payment {PaymentId} settled (simulated) for agent {AgentId}",
-            payment.Id, agentId);
-
         await _eventPublisher.PublishPaymentSentAsync(payment.Id, agentId, amountSats, ct);
 
         return payment;

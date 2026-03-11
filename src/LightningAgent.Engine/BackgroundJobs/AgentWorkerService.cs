@@ -52,17 +52,18 @@ public class AgentWorkerService : BackgroundService
                 // Get all active agents
                 var activeAgents = await agentRepo.GetAllAsync(AgentStatus.Active, stoppingToken);
 
-                foreach (var agent in activeAgents)
-                {
-                    stoppingToken.ThrowIfCancellationRequested();
+                using var semaphore = new SemaphoreSlim(_settings.MaxConcurrentAgents);
 
+                var agentTasks = activeAgents.Select(async agent =>
+                {
+                    await semaphore.WaitAsync(stoppingToken);
                     try
                     {
                         await workerAgent.ExecuteAssignedWorkAsync(agent.Id, stoppingToken);
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
-                        throw;
+                        // Let cancellation propagate
                     }
                     catch (Exception ex)
                     {
@@ -71,7 +72,13 @@ public class AgentWorkerService : BackgroundService
                             "AgentWorkerService: error running worker for agent {AgentId} '{Name}'",
                             agent.Id, agent.Name);
                     }
-                }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+
+                await Task.WhenAll(agentTasks);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

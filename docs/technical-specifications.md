@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.8.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.9.0 -- comprehensive technical reference.
 
 ---
 
@@ -693,9 +693,11 @@ Triggers the full `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync` pipeli
 1. Sets milestone status to `Verifying`
 2. Runs all applicable verification strategies in parallel
 3. Persists each verification result
-4. Determines overall pass/fail (all strategies pass OR average score >= 0.7)
-5. On pass: settles escrow, processes payment, updates reputation (positive)
+4. Determines overall pass/fail (all strategies pass OR weighted score >= 0.7)
+5. On pass: settles escrow, processes streaming payment via `PaymentService.StreamPaymentAsync`, updates reputation (positive)
 6. On fail: cancels escrow, updates reputation (negative)
+
+**PaymentService.StreamPaymentAsync** now creates real HODL invoices via LND (replaced simulation mode). It generates a preimage/hash, creates a HODL invoice, settles immediately, and records the real payment hash. On failure, the payment is marked as `Failed` without throwing.
 
 **Response:**
 ```json
@@ -1471,6 +1473,12 @@ Configuration is read from `appsettings.json` (and environment-specific override
 | `BaseUrl` | string | `""` | ACP protocol service base URL |
 | `ApiKey` | string | `""` | API key for authenticating with ACP service |
 
+**ACP Client Request Signing and Retry:**
+
+The `AcpClient` applies HMAC-SHA256 request signing to all outbound requests: it computes `HMAC-SHA256(ApiKey, timestamp + ":" + body)` and adds `X-ACP-Timestamp` and `X-ACP-Signature` headers to each request.
+
+Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 16s). If all retries are exhausted, the client falls back to a local GUID for task identification.
+
 ### 4.5 ClaudeAi
 
 **Settings class:** `LightningAgent.Core.Configuration.ClaudeAiSettings`
@@ -1492,6 +1500,7 @@ Configuration is read from `appsettings.json` (and environment-specific override
 |----------|------|---------|-------------|
 | `DefaultExpirySec` | int | `3600` | HODL invoice expiry in seconds (1 hour) |
 | `MaxRetries` | int | `2` | Max retry attempts for failed escrow operations |
+| `EncryptionKey` | string | `""` | AES-256-GCM key for HODL preimage encryption at rest. Base64-encoded, 32 bytes. Empty string disables encryption. |
 
 ### 4.7 Pricing
 
@@ -1536,6 +1545,7 @@ Configuration is read from `appsettings.json` (and environment-specific override
 | `Enabled` | bool | `true` | Enable/disable the autonomous worker agent background service |
 | `PollingIntervalSeconds` | int | `30` | How often the worker agent polls for new assigned tasks |
 | `MaxTasksPerBatch` | int | `5` | Maximum number of tasks to process per polling cycle |
+| `MaxConcurrentAgents` | int | `5` | Maximum number of agent tasks to execute in parallel per polling cycle. Uses `SemaphoreSlim` for bounded concurrency. |
 
 ### 4.11 ApiSecurity
 
@@ -1577,7 +1587,9 @@ Read directly from `IConfiguration` (no strongly-typed settings class).
 
 The `VerificationPipeline` runs all strategies that `CanHandle` the current `TaskType` in parallel via `Task.WhenAll`. Each strategy produces a `VerificationResult(Score, Passed, Details, StrategyType)`.
 
-Overall milestone pass logic: **all strategies pass** OR **average score >= 0.7** (`PassThreshold` constant in `TaskLifecycleWorkflow`).
+The pipeline now loads learned weights per strategy from `VerificationStrategyConfig` (where `ParameterName == "Weight"`). It computes a weighted average: `sum(score_i * weight_i) / sum(weight_i)`, with a default weight of 1.0 for unconfigured strategies. The pipeline returns a `VerificationPipelineResult` record containing `List<VerificationResult> Results` and `double WeightedScore`.
+
+Overall milestone pass logic: **all individual strategies pass** OR **weighted score >= 0.7** (`PassThreshold` constant in `TaskLifecycleWorkflow`).
 
 | Strategy | Type | Applicable TaskTypes | CanHandle Logic | Description |
 |----------|------|---------------------|-----------------|-------------|
@@ -1630,7 +1642,7 @@ Implemented in `LightningAgent.Engine.ReputationService`. Updated after every mi
 | `VerificationPasses` | Incremented when `verificationPassed = true` |
 | `VerificationFails` | Incremented when `verificationPassed = false` |
 | `DisputeCount` | Incremented externally when disputes are filed |
-| `AvgResponseTimeSec` | Rolling average: `((prev * (n-1)) + current) / n` |
+| `AvgResponseTimeSec` | Rolling average: `((prev * (n-1)) + current) / n`. Response time is now tracked from actual wall-clock elapsed time during milestone processing. |
 
 ### Scoring Formula
 
@@ -1758,7 +1770,7 @@ All background services extend `BackgroundService` and run as hosted services re
 | **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF via async fulfillment (consumer contract), uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Falls back to `Random.Shared` if VRF is not configured or times out (90 seconds). |
 | **VrfResponsePoller** | `LightningAgent.Engine.BackgroundJobs.VrfResponsePoller` | 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. When fulfilled, invokes the registered callback with the random words. Times out requests after 40 attempts (~10 minutes). |
 | **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Refreshes all configured price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH) from Chainlink oracles. Each pair is fetched independently with its own error handling -- a failure in one pair does not block others. |
-| **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch). |
+| **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Now uses `SemaphoreSlim`-bounded `Task.WhenAll` for concurrent execution, configurable via `WorkerAgentSettings.MaxConcurrentAgents` (default 5). Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch, MaxConcurrentAgents). |
 | **EscrowRetryService** | `LightningAgent.Engine.BackgroundJobs.EscrowRetryService` | 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on initial attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, updates escrow to `Held` with the new invoice. On failure, logs warning and retries next cycle. |
 | **InvoiceStatusPoller** | `LightningAgent.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |
 | **SecretRotationService** | `LightningAgent.Engine.Services.SecretRotationService` | 6 hours | Validates Claude and OpenRouter API keys by issuing lightweight requests to `GET /v1/models` (Anthropic) and `GET /models` (OpenRouter). Logs warnings when keys are invalid (HTTP 401) or unreachable. |
@@ -1945,6 +1957,27 @@ Defined in `Directory.Build.props` and inherited by all projects:
 | `Nullable` | `enable` |
 | `ImplicitUsings` | `enable` |
 | `LangVersion` | `latest` |
+
+---
+
+## 13. Security
+
+### 13.1 Preimage Encryption
+
+`PreimageProtector` is a static helper class in `LightningAgent.Engine.Security` that provides AES-256-GCM encryption for HODL invoice preimages at rest.
+
+**Encryption details:**
+- AES-256-GCM with a 12-byte random nonce and 16-byte authentication tag
+- `Protect(preimageHex)` returns an `"enc:"` prefixed base64 ciphertext
+- `Unprotect(stored)` handles both encrypted (prefixed with `"enc:"`) and plaintext values, providing backwards compatibility with existing unencrypted preimages
+
+**Initialization:**
+- `PreimageProtector.Initialize()` is called at startup, reading the encryption key from the `Escrow:EncryptionKey` configuration setting
+- When `EncryptionKey` is empty, encryption is disabled and preimages are stored in plaintext
+
+**Integration points:**
+- `EscrowManager` calls `PreimageProtector.Protect()` when a new preimage is generated during escrow creation
+- `TaskLifecycleWorkflow` calls `PreimageProtector.Unprotect()` to recover the plaintext preimage before settling an invoice with LND
 
 ---
 

@@ -71,6 +71,8 @@ public class TaskLifecycleWorkflow
         byte[] agentOutput,
         CancellationToken ct = default)
     {
+        var startTime = DateTime.UtcNow;
+
         _logger.LogInformation(
             "Processing submission for milestone {MilestoneId} ({OutputBytes} bytes)",
             milestoneId, agentOutput.Length);
@@ -85,7 +87,8 @@ public class TaskLifecycleWorkflow
         await _milestoneRepo.UpdateAsync(milestone, ct);
 
         // 3. Run verification pipeline
-        var results = await _verificationPipeline.RunVerificationAsync(milestone, agentOutput, ct);
+        var pipelineResult = await _verificationPipeline.RunVerificationAsync(milestone, agentOutput, ct);
+        var results = pipelineResult.Results;
 
         // 4. Save each VerificationResult to DB
         foreach (var result in results)
@@ -105,9 +108,9 @@ public class TaskLifecycleWorkflow
             await _verificationRepo.CreateAsync(verification, ct);
         }
 
-        // 5. Determine overall pass/fail
+        // 5. Determine overall pass/fail using weighted score from pipeline
         bool allPassed = results.Count > 0 && results.All(r => r.Passed);
-        double averageScore = results.Count > 0 ? results.Average(r => r.Score) : 0.0;
+        double averageScore = pipelineResult.WeightedScore;
         bool passed = allPassed || averageScore >= PassThreshold;
 
         _logger.LogInformation(
@@ -133,7 +136,8 @@ public class TaskLifecycleWorkflow
             var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
             if (escrow is not null)
             {
-                var preimage = Convert.FromHexString(escrow.PaymentPreimage ?? string.Empty);
+                var decryptedHex = LightningAgent.Engine.Security.PreimageProtector.Unprotect(escrow.PaymentPreimage ?? string.Empty);
+                var preimage = Convert.FromHexString(decryptedHex);
                 await _escrowManager.SettleEscrowAsync(escrow.Id, preimage, ct);
 
                 _logger.LogInformation(
@@ -150,11 +154,12 @@ public class TaskLifecycleWorkflow
             // 6d. Update reputation
             if (agentId > 0)
             {
+                var elapsedSec = (DateTime.UtcNow - startTime).TotalSeconds;
                 await _reputationService.UpdateReputationAsync(
                     agentId,
                     taskCompleted: true,
                     verificationPassed: true,
-                    responseTimeSec: 0.0,
+                    responseTimeSec: elapsedSec,
                     ct);
             }
 
@@ -215,11 +220,12 @@ public class TaskLifecycleWorkflow
             // 7c. Update reputation
             if (agentId > 0)
             {
+                var elapsedSec = (DateTime.UtcNow - startTime).TotalSeconds;
                 await _reputationService.UpdateReputationAsync(
                     agentId,
                     taskCompleted: false,
                     verificationPassed: false,
-                    responseTimeSec: 0.0,
+                    responseTimeSec: elapsedSec,
                     ct);
             }
         }

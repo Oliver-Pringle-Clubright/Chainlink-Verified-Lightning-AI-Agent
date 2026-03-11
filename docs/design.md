@@ -1,6 +1,6 @@
 # Chainlink-Verified-Lightning AI-Agent — Architecture & Design
 
-Version 1.8.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
+Version 1.9.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ---
 
@@ -108,7 +108,8 @@ The full task lifecycle from arrival to payment:
  │
  8  VerificationPipeline selects applicable strategies by task type
  │  and runs them in parallel (code compile, schema validation,
- │  text similarity, AI judge, CLIP score)
+ │  text similarity, AI judge, CLIP score); strategies are weighted
+ │  by learned weights from VerificationStrategyConfig
  │
  9  Chainlink Functions submits the verification proof on-chain:
  │    - Source code runs off-chain in a decentralized oracle network
@@ -125,7 +126,8 @@ The full task lifecycle from arrival to payment:
  │    - CancelEscrowAsync() → /v2/invoices/cancel → sats refunded
  │
 12  ReputationService updates the agent's score
- │  (completion rate, verification pass rate, response time, dispute rate)
+ │  (completion rate, verification pass rate, response time tracked from
+ │  actual elapsed time, dispute rate)
  │
 13  DeliverableAssembler (AI) collects all subtask outputs and assembles
     the final deliverable for the client
@@ -159,10 +161,10 @@ LightningAgent.sln
 | 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (15 tables with indexes), 16 repository implementations including `AnalyticsRepository`. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
 | 3 | **LightningAgent.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Multi-path payment (MPP) support with configurable `MaxParts`. Channel management: `GetChannelBalanceAsync`, `ListChannelsAsync`, `OpenChannelAsync`. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
 | 4 | **LightningAgent.Chainlink** | Nethereum-based clients for five Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (VRF v2+ with async fulfillment via consumer contract and `VrfConsumerAbi`), `ChainlinkPriceFeedClient` (multi-pair price feeds: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ChainlinkCcipClient` (cross-chain messaging via IRouterClient). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all five contract interfaces plus `VrfConsumerAbi`. |
-| 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification. `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
+| 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification with HMAC-SHA256 request signing and retry with exponential backoff (3 attempts, 1s/4s/16s). `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
 | 6 | **LightningAgent.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). `MultiModelClient` for OpenRouter integration with task-type-based model selection and automatic fallback to Claude. Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
-| 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type and runs them concurrently via `Task.WhenAll`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
-| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PaymentService`, `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. Thirteen background services. |
+| 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type, runs them concurrently via `Task.WhenAll`, and computes weighted scores using learned weights from `VerificationStrategyConfig`, returning a `VerificationPipelineResult`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
+| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PreimageProtector` for AES-256-GCM encryption of HODL preimages at rest. `PaymentService` (wired with real LND HODL invoice creation/settlement, no more simulation mode), `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. `AgentWorkerService` now uses `SemaphoreSlim`-bounded concurrent execution (configurable `MaxConcurrentAgents`). Thirteen background services. |
 | 9 | **LightningAgent.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
 | 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 42 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, escrow lifecycle, and end-to-end workflow orchestration. |
 
@@ -239,6 +241,7 @@ The HODL invoice escrow lifecycle governs every milestone payment:
 ```
 1. EscrowManager generates 32 random bytes (preimage)
 2. Computes SHA256(preimage) → paymentHash
+2b. PreimageProtector encrypts the preimage via AES-256-GCM before database storage
 3. Calls LND POST /v2/invoices/hodl with:
    - hash: paymentHash (hex)
    - value: milestone payout in sats
@@ -265,7 +268,7 @@ The HODL invoice escrow lifecycle governs every milestone payment:
 
 ```
 1. Verification passes
-2. EscrowManager calls LND POST /v2/invoices/settle with the preimage
+2. EscrowManager decrypts the preimage via `PreimageProtector.Unprotect()` and calls LND POST /v2/invoices/settle with the preimage
 3. LND reveals preimage to the payment channel
 4. Sats flow instantly to the agent's wallet
 5. Escrow status → Settled, SettledAt timestamp recorded
@@ -398,7 +401,7 @@ Thirteen `BackgroundService` implementations run as hosted services in the ASP.N
 | **VrfResponsePoller** | Every 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. Invokes registered callbacks when fulfillment is detected. Times out after 40 attempts (~10 minutes). |
 | **PriceFeedRefresher** | Every 5 minutes | Refreshes all configured Chainlink price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH). Each pair is fetched independently -- failure in one does not block others. Results cached in the `PriceCache` table. |
 | **SpendLimitResetter** | Every 1 hour | Calls `ISpendLimitService.ResetExpiredPeriodsAsync()` to reset spend counters for agents whose daily or weekly period has elapsed. Ensures spend caps roll over correctly. |
-| **AgentWorkerService** | Every 30 seconds | Polls for tasks assigned to active agents. For each agent with assigned work, builds an AI prompt from the task and milestone descriptions, calls Claude to generate output, and submits the result through the TaskLifecycleWorkflow. Configurable via `WorkerAgentSettings` (enabled/disabled, polling interval, batch size). |
+| **AgentWorkerService** | Every 30 seconds | Polls for tasks assigned to active agents. For each agent with assigned work, builds an AI prompt from the task and milestone descriptions, calls Claude to generate output, and submits the result through the TaskLifecycleWorkflow. Uses `SemaphoreSlim`-bounded concurrent execution with configurable `MaxConcurrentAgents` (default 5). Configurable via `WorkerAgentSettings` (enabled/disabled, polling interval, batch size). |
 | **EscrowRetryService** | Every 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on first attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, transitions the escrow from `PendingChannel` to `Held`. Logs failures and retries on the next cycle. |
 | **InvoiceStatusPoller** | Every 30 seconds | Polls all `Held` escrows and checks their invoice state via `ILightningClient.GetInvoiceStateAsync()`. If the invoice state is `SETTLED`, updates escrow to `Settled`. If `CANCELLED`/`CANCELED`, updates to `Cancelled`. This catches invoice state changes that occur outside the application's control (e.g., manual settlement or external cancellation). |
 | **SecretRotationService** | Every 6 hours | Validates API keys for Claude and OpenRouter by issuing lightweight requests to their respective APIs. Logs warnings when keys are invalid or expired, prompting administrators to rotate keys via `POST /api/secrets/rotate/claude` or `POST /api/secrets/rotate/openrouter`. |
@@ -450,6 +453,10 @@ The `LndTlsCertHandler` configures the `HttpClient` to trust the self-signed TLS
 ### Private Key Management for Ethereum
 
 The `EthereumAccountProvider` loads the Ethereum private key from a file path specified in `ChainlinkSettings.PrivateKeyPath`. This key is used to sign Chainlink Functions requests and other on-chain transactions via Nethereum. The key file should be protected with filesystem permissions and never committed to source control.
+
+### HODL Preimage Encryption at Rest
+
+`PreimageProtector` uses AES-256-GCM to encrypt HODL invoice preimages before storing them in the database. The encryption key is configured via `Escrow:EncryptionKey` in appsettings and initialized at startup in `Program.cs`. Encrypted values are prefixed with `enc:` to distinguish them from plaintext. `Unprotect()` is backwards compatible: it handles both encrypted (prefixed with `enc:`) and plaintext values, allowing a seamless migration path for existing data.
 
 ### Exception Handling
 

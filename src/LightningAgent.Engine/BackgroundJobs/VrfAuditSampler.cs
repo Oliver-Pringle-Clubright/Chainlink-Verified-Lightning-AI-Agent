@@ -82,11 +82,12 @@ public class VrfAuditSampler : BackgroundService
                         try
                         {
                             var outputData = Convert.FromBase64String(auditMilestone.OutputData!);
-                            var reVerifyResults = await verificationPipeline.RunVerificationAsync(
+                            var pipelineResult = await verificationPipeline.RunVerificationAsync(
                                 auditMilestone, outputData, stoppingToken);
+                            var reVerifyResults = pipelineResult.Results;
 
                             var allPassed = reVerifyResults.Count > 0 && reVerifyResults.All(r => r.Passed);
-                            var avgScore = reVerifyResults.Count > 0 ? reVerifyResults.Average(r => r.Score) : 0.0;
+                            var avgScore = pipelineResult.WeightedScore;
 
                             if (allPassed)
                             {

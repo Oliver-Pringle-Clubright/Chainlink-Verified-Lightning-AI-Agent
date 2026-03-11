@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.8.0**
+**Version 1.9.0**
 
 ## Table of Contents
 
@@ -226,7 +226,8 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
 ```json
 "Escrow": {
   "DefaultExpirySec": 3600,
-  "MaxRetries": 2
+  "MaxRetries": 2,
+  "EncryptionKey": ""   // AES-256-GCM key for preimage encryption at rest (base64, 32 bytes)
 }
 ```
 
@@ -370,7 +371,8 @@ curl -H "X-Api-Key: your-secret-api-key-here" http://localhost:5000/api/agents
 "WorkerAgent": {
   "Enabled": true,
   "PollingIntervalSeconds": 30,
-  "MaxTasksPerBatch": 5
+  "MaxTasksPerBatch": 5,
+  "MaxConcurrentAgents": 5   // max parallel agent executions per cycle
 }
 ```
 
@@ -604,6 +606,8 @@ Response:
 ## 6. ACP Integration
 
 The **Agentic Commerce Protocol (ACP)** provides a standardized interface for external AI agents and platforms to interact with this network. All ACP endpoints live under `/api/acp`.
+
+All outbound ACP requests are signed with HMAC-SHA256 using the configured `Acp:ApiKey`. Each request includes `X-ACP-Timestamp` and `X-ACP-Signature` headers. Task posting retries up to 3 times with exponential backoff (1s, 4s, 16s) before falling back to local task ID generation.
 
 ### 6.1 Service Discovery
 
@@ -907,6 +911,8 @@ Every agent has a reputation score that reflects their track record. The system 
 | Having a dispute filed against you | Score decreases |
 | Losing a dispute | Score decreases further |
 | Fast response time | Bonus increase |
+
+> **v1.9.0:** Response time is now tracked from actual wall-clock elapsed time during milestone processing (from submission start to completion), rather than a placeholder value.
 
 ### Reputation Benefits
 
@@ -1679,6 +1685,21 @@ Cached idempotency responses expire after 24 hours. Expired keys are treated as 
 ### 23.14 Dependency Security
 
 Newtonsoft.Json pinned to v13.0.3 to address CVE GHSA-5crp-9r3c-p9vr (previously 11.0.2 via Nethereum).
+
+### Preimage Encryption at Rest (v1.9.0)
+
+`PreimageProtector` uses AES-256-GCM to encrypt HODL invoice preimages before database storage. This ensures that even if the database is compromised, preimages remain confidential.
+
+- Configure via `Escrow:EncryptionKey` (base64-encoded 32-byte key).
+- Encrypted values are prefixed with `enc:` for backward compatibility -- existing plaintext preimages continue to work without migration.
+- `Unprotect()` transparently handles both encrypted and plaintext preimages, checking for the `enc:` prefix to determine the decryption path.
+
+### ACP Request Signing (v1.9.0)
+
+Outbound ACP requests are signed with HMAC-SHA256 using the configured `Acp:ApiKey` to ensure authenticity and integrity of inter-agent communication.
+
+- Each request includes an `X-ACP-Timestamp` header (Unix seconds) and an `X-ACP-Signature` header containing the HMAC-SHA256 digest.
+- Requests are retried with exponential backoff (3 attempts: 1s, 4s, 16s) before falling back to local task ID generation.
 
 ---
 
