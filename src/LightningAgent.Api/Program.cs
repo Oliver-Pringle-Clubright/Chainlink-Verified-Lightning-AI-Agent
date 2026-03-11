@@ -78,6 +78,41 @@ builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));
 builder.Services.Configure<BackupSettings>(builder.Configuration.GetSection("Backup"));
+builder.Services.Configure<NetworkSettings>(builder.Configuration.GetSection("Network"));
+
+builder.Services.PostConfigure<ChainlinkSettings>(settings =>
+{
+    var networkSettings = builder.Configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
+    var source = networkSettings.IsTest ? settings.Testnet : settings.Mainnet;
+
+    // Only override main properties if the network-specific value is non-empty
+    if (!string.IsNullOrEmpty(source.EthereumRpcUrl)) settings.EthereumRpcUrl = source.EthereumRpcUrl;
+    if (!string.IsNullOrEmpty(source.FunctionsRouterAddress)) settings.FunctionsRouterAddress = source.FunctionsRouterAddress;
+    if (!string.IsNullOrEmpty(source.AutomationRegistryAddress)) settings.AutomationRegistryAddress = source.AutomationRegistryAddress;
+    if (!string.IsNullOrEmpty(source.VrfCoordinatorAddress)) settings.VrfCoordinatorAddress = source.VrfCoordinatorAddress;
+    if (!string.IsNullOrEmpty(source.VrfKeyHash)) settings.VrfKeyHash = source.VrfKeyHash;
+    if (!string.IsNullOrEmpty(source.VrfConsumerAddress)) settings.VrfConsumerAddress = source.VrfConsumerAddress;
+    if (!string.IsNullOrEmpty(source.BtcUsdPriceFeedAddress)) settings.BtcUsdPriceFeedAddress = source.BtcUsdPriceFeedAddress;
+    if (!string.IsNullOrEmpty(source.EthUsdPriceFeedAddress)) settings.EthUsdPriceFeedAddress = source.EthUsdPriceFeedAddress;
+    if (!string.IsNullOrEmpty(source.LinkUsdPriceFeedAddress)) settings.LinkUsdPriceFeedAddress = source.LinkUsdPriceFeedAddress;
+    if (!string.IsNullOrEmpty(source.LinkEthPriceFeedAddress)) settings.LinkEthPriceFeedAddress = source.LinkEthPriceFeedAddress;
+    if (!string.IsNullOrEmpty(source.VrfSubscriptionId)) settings.VrfSubscriptionId = source.VrfSubscriptionId;
+    if (!string.IsNullOrEmpty(source.FunctionsSubscriptionId)) settings.FunctionsSubscriptionId = source.FunctionsSubscriptionId;
+    if (!string.IsNullOrEmpty(source.DonId)) settings.DonId = source.DonId;
+    if (!string.IsNullOrEmpty(source.PrivateKeyPath)) settings.PrivateKeyPath = source.PrivateKeyPath;
+    if (!string.IsNullOrEmpty(source.CcipRouterAddress)) settings.CcipRouterAddress = source.CcipRouterAddress;
+    if (source.CcipSourceChainSelector != 0) settings.CcipSourceChainSelector = source.CcipSourceChainSelector;
+});
+
+builder.Services.PostConfigure<LightningSettings>(settings =>
+{
+    var networkSettings = builder.Configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
+    var source = networkSettings.IsTest ? settings.Testnet : settings.Mainnet;
+
+    if (!string.IsNullOrEmpty(source.LndRestUrl)) settings.LndRestUrl = source.LndRestUrl;
+    if (!string.IsNullOrEmpty(source.MacaroonPath)) settings.MacaroonPath = source.MacaroonPath;
+    if (!string.IsNullOrEmpty(source.TlsCertPath)) settings.TlsCertPath = source.TlsCertPath;
+});
 
 // ── Lightning Network ─────────────────────────────────────────────
 builder.Services.AddLightningServices(builder.Configuration);

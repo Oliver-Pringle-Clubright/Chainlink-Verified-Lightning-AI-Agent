@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using LightningAgent.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,9 @@ public static class StartupValidator
     /// </summary>
     public static StartupValidationResult Validate(IConfiguration configuration, ILogger logger)
     {
+        var networkSettings = configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
+        logger.LogInformation("Network mode: {Mode}", networkSettings.IsTest ? "TESTNET" : "MAINNET");
+
         var result = new StartupValidationResult();
 
         var devMode = string.Equals(
@@ -115,6 +119,24 @@ public static class StartupValidator
                         logger.LogWarning(
                             "Connected to Ethereum MAINNET — all transactions will use real ETH. " +
                             "Set Chainlink:EthereumRpcUrl to a testnet RPC to avoid this.");
+                    }
+
+                    var networkSettings = configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
+                    bool isTestnet = chainId != 1 && chainId != 137 && chainId != 56; // Not mainnet, polygon mainnet, or BSC mainnet
+
+                    if (networkSettings.IsTest && !isTestnet)
+                    {
+                        logger.LogError(
+                            "NETWORK MISMATCH: Network:IsTest is true but connected to MAINNET chain {ChainId} ({NetworkName}). " +
+                            "Set Network:IsTest to false or change Chainlink:EthereumRpcUrl to a testnet RPC.",
+                            chainId, networkName);
+                    }
+                    else if (!networkSettings.IsTest && isTestnet)
+                    {
+                        logger.LogWarning(
+                            "Network:IsTest is false but connected to testnet chain {ChainId} ({NetworkName}). " +
+                            "Set Network:IsTest to true or change Chainlink:EthereumRpcUrl to a mainnet RPC.",
+                            chainId, networkName);
                     }
                 }
             }

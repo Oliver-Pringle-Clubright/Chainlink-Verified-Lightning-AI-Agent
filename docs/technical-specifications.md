@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v2.0.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v2.1.0 -- comprehensive technical reference.
 
 ---
 
@@ -1610,6 +1610,19 @@ Read directly from `IConfiguration` (no strongly-typed settings class).
 | `DefaultModel` | string | `anthropic/claude-sonnet-4-20250514` | Default model used when no task-type mapping matches. |
 | `TaskTypeModels` | `Dictionary<string, string>` | `{}` | Maps task type keywords (found in system prompts) to model identifiers. Example: `{ "Code": "anthropic/claude-sonnet-4-20250514", "Data": "google/gemini-pro" }`. |
 
+### 4.14 Network
+
+**Settings class:** `LightningAgent.Core.Configuration.NetworkSettings`
+**Config path:** `Network`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `IsTest` | bool | `true` | Selects testnet (`true`) or mainnet (`false`) configuration. Controls which network sub-object is active for both Chainlink and Lightning settings. |
+
+Both `ChainlinkSettings` and `LightningSettings` now contain `Testnet` and `Mainnet` properties of type `ChainlinkNetworkConfig` and `LightningNetworkConfig` respectively. These sub-objects mirror the same properties as their parent settings class (e.g., `EthereumRpcUrl`, `FunctionsRouterAddress` for Chainlink; `LndRestUrl`, `MacaroonPath` for Lightning).
+
+At startup, `PostConfigure<ChainlinkSettings>` and `PostConfigure<LightningSettings>` copy the active network's values into the main (top-level) properties. Only non-empty values from the sub-object override the main properties, providing fallback behavior -- top-level values act as defaults and the active network sub-object selectively overrides them.
+
 ---
 
 ## 5. Verification Strategies
@@ -2033,7 +2046,7 @@ Defined in `Directory.Build.props` and inherited by all projects:
 
 ### Chain ID Validation
 
-`ValidateChainIdAsync()` calls `eth_chainId` on the configured Ethereum RPC endpoint (`Chainlink:EthereumRpcUrl`). It logs the detected network name (e.g., Mainnet, Sepolia, Holesky) and warns if the application is connected to mainnet, as this may have financial implications.
+`ValidateChainIdAsync()` calls `eth_chainId` on the configured Ethereum RPC endpoint (`Chainlink:EthereumRpcUrl`). It logs the detected network name (e.g., Mainnet, Sepolia, Holesky) and warns if the application is connected to mainnet, as this may have financial implications. It also validates that `Network:IsTest` matches the detected chain ID: mainnet chain IDs (1 for Ethereum, 137 for Polygon, 56 for BSC) are considered mainnet; all other chain IDs are considered testnet. A mismatch (e.g., `IsTest=true` but connected to chain ID 1) is logged as an ERROR to prevent accidental wrong-network transactions.
 
 ---
 

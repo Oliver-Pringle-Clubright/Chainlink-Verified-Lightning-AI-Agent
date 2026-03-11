@@ -1,6 +1,6 @@
 # Chainlink-Verified-Lightning AI-Agent — Architecture & Design
 
-Version 2.0.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
+Version 2.1.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ---
 
@@ -13,7 +13,7 @@ The system rests on three pillars:
 | Pillar | Role |
 |--------|------|
 | **ACP (Agentic Commerce Protocol)** | Discovery, task posting, and agent-to-agent price negotiation. Agents advertise capabilities and bid on work through a standardized protocol. |
-| **Chainlink** | Trustless verification. Chainlink Functions run verification logic off-chain and post proofs on-chain. Chainlink VRF provides unpredictable random audits via async fulfillment through a consumer contract. Chainlink Price Feeds supply real-time multi-pair conversion (BTC/USD, ETH/USD, LINK/USD, LINK/ETH). Chainlink Automation monitors escrow expiry and task timeouts via registered upkeeps. Chainlink CCIP enables cross-chain agent communication and token transfers. |
+| **Chainlink** | Trustless verification. Chainlink Functions run verification logic off-chain and post proofs on-chain. Chainlink VRF provides unpredictable random audits via async fulfillment through a consumer contract. Chainlink Price Feeds supply real-time multi-pair conversion (BTC/USD, ETH/USD, LINK/USD, LINK/ETH). Chainlink Automation monitors escrow expiry and task timeouts via registered upkeeps. Chainlink CCIP enables cross-chain agent communication and token transfers. All Chainlink contract addresses support dual testnet/mainnet configuration via `Network:IsTest`. |
 | **Lightning Network** | Instant micropayments. HODL invoices lock satoshis in escrow without a custodian. Settlement reveals a preimage; cancellation returns funds. No on-chain smart contract is required for the payment escrow — the Lightning protocol itself enforces atomicity. |
 
 Together these form an autonomous agent economy: agents register capabilities, tasks arrive in natural language or ACP format, Claude AI decomposes tasks into milestones, the system matches agents by reputation and skill, locks payment in escrow, verifies output through a decentralized pipeline, settles payment atomically, and updates reputation scores — all without human intervention.
@@ -161,7 +161,7 @@ LightningAgent.sln
 
 | # | Project | Responsibility |
 |---|---------|---------------|
-| 1 | **LightningAgent.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry, SystemSummary, AgentStats, TimelineEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, JwtSettings, OpenRouterSettings, etc.), all service and repository interfaces (including `ITaskQueue`, `IVerificationPlugin`, `IAnalyticsRepository`). Lightning models: `ChannelBalance`, `LndChannel`, `OpenChannelResult`, `RecommendedPeer`, `MultiPathPaymentResult`. Zero external dependencies. |
+| 1 | **LightningAgent.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry, SystemSummary, AgentStats, TimelineEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, JwtSettings, OpenRouterSettings, NetworkSettings, ChainlinkNetworkConfig, LightningNetworkConfig, etc.), all service and repository interfaces (including `ITaskQueue`, `IVerificationPlugin`, `IAnalyticsRepository`). Lightning models: `ChannelBalance`, `LndChannel`, `OpenChannelResult`, `RecommendedPeer`, `MultiPathPaymentResult`. Zero external dependencies. |
 | 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (15 tables with indexes), 16 repository implementations including `AnalyticsRepository`. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
 | 3 | **LightningAgent.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Multi-path payment (MPP) support with configurable `MaxParts`. Channel management: `GetChannelBalanceAsync`, `ListChannelsAsync`, `OpenChannelAsync`. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
 | 4 | **LightningAgent.Chainlink** | Nethereum-based clients for five Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (VRF v2+ with async fulfillment via consumer contract and `VrfConsumerAbi`), `ChainlinkPriceFeedClient` (multi-pair price feeds: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ChainlinkCcipClient` (cross-chain messaging via IRouterClient). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all five contract interfaces plus `VrfConsumerAbi`. |
@@ -508,6 +508,10 @@ The `AuditLog` table records all significant events with `EventType`, `EntityTyp
 ### SignalR Hub Authorization
 
 The `AgentNotificationHub` now requires the `ApiKeyAuthenticated` authorization policy, which verifies that the `AuthenticatedAgentId` is present in `HttpContext.Items` (set by `ApiKeyAuthMiddleware`). This ensures only authenticated agents can connect to the hub and receive real-time notifications. In DevMode, the middleware passes all requests through without validation, so the hub remains accessible for local development and testing.
+
+### Network Safety
+
+The `Network:IsTest` setting (default `true`) selects between `Testnet` and `Mainnet` sub-configurations for both Chainlink and Lightning settings. At startup, `StartupValidator` compares the `IsTest` value against the Ethereum chain ID detected via `eth_chainId`. If there is a mismatch -- for example, `IsTest=true` but the RPC endpoint returns a mainnet chain ID -- the validator logs the discrepancy as an ERROR. This prevents accidentally sending transactions on the wrong network (e.g., deploying testnet logic against real funds on mainnet, or wasting time debugging against a testnet when mainnet was intended).
 
 ---
 

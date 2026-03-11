@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 2.0.0**
+**Version 2.1.0**
 
 ## Table of Contents
 
@@ -130,6 +130,43 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
 **Startup Validation (v2.0.0):** The application validates configuration at startup. In production mode (`DevMode=false`), missing `ClaudeAi:ApiKey` or `Lightning:LndRestUrl` will halt startup with a clear error message. Other missing settings (Chainlink contract addresses, LND certificate paths) produce warnings but allow the application to start.
 
 **Automatic Network Detection (v2.0.0):** At startup the application calls `eth_chainId` on the configured `Chainlink:EthereumRpcUrl` to detect the Ethereum network automatically. If connected to mainnet, a warning is logged to alert operators.
+
+### Network Selection
+
+The `Network:IsTest` boolean (default `true`) controls whether the application uses testnet or mainnet configuration values.
+
+```json
+"Network": {
+  "IsTest": true
+}
+```
+
+When `IsTest` is `true`, the application uses testnet settings; when `false`, it uses mainnet settings. Both the `Lightning` and `Chainlink` configuration sections now contain `Testnet` and `Mainnet` sub-objects. The application automatically reads from the correct sub-object based on the `IsTest` value.
+
+For example, the `Lightning` section structure:
+
+```json
+"Lightning": {
+  "LndRestUrl": "https://localhost:8080",
+  "MacaroonPath": "",
+  "TlsCertPath": "",
+  "DefaultInvoiceExpirySec": 3600,
+  "Testnet": {
+    "LndRestUrl": "https://testnet-node:8080",
+    "MacaroonPath": "/path/to/testnet/admin.macaroon",
+    "TlsCertPath": "/path/to/testnet/tls.cert"
+  },
+  "Mainnet": {
+    "LndRestUrl": "https://mainnet-node:8080",
+    "MacaroonPath": "/path/to/mainnet/admin.macaroon",
+    "TlsCertPath": "/path/to/mainnet/tls.cert"
+  }
+}
+```
+
+The same pattern applies to the `Chainlink` section (e.g., `Chainlink:Testnet:EthereumRpcUrl` vs `Chainlink:Mainnet:EthereumRpcUrl`).
+
+**Precedence:** If a value is set in both the top-level section AND the active network sub-object, the sub-object value takes precedence. This allows you to set shared defaults at the top level and override only what differs per network.
 
 ### 4.1 Database
 
@@ -1803,6 +1840,13 @@ The `AgentNotificationHub` now requires authentication via the `ApiKeyAuthentica
 - Query `GET /api/health/services` to inspect the health of each background service.
 - Look at the `consecutiveFailures` count and `lastError` message for the affected service.
 - After 3 consecutive failures, a `CRITICAL` log alert is emitted -- search the logs for this keyword to identify recurring issues.
+
+### Network Mismatch Error at Startup
+
+- `StartupValidator` detected that `Network:IsTest` does not match the Ethereum chain ID returned by the configured RPC endpoint.
+- If `IsTest=true`, verify that `Chainlink:Testnet:EthereumRpcUrl` points to a testnet RPC (e.g., Sepolia, Holesky).
+- If `IsTest=false`, verify that `Chainlink:Mainnet:EthereumRpcUrl` points to the correct mainnet RPC (e.g., Ethereum mainnet chain ID 1).
+- The mismatch is logged as an ERROR to prevent accidentally sending transactions on the wrong network.
 
 ---
 
