@@ -38,6 +38,11 @@ Return as JSON matching the FraudReport schema.";
 Convert natural language task descriptions into structured task specifications.
 Extract: title, description, taskType (Code/Data/Text/Image), requiredSkills, budget estimation,
 verification requirements, and any deadline information.
+
+IMPORTANT: The ""verificationRequirements"" field MUST be a plain string, NOT a JSON object or array.
+For example: ""verificationRequirements"": ""Code compiles without errors and passes all unit tests""
+Do NOT return it as an object like {""type"": ""..."", ""criteria"": [...]}.
+
 Return as JSON matching the AcpTaskSpec schema.";
 
     public const string DeliverableAssembly = @"You are a deliverable assembly agent.

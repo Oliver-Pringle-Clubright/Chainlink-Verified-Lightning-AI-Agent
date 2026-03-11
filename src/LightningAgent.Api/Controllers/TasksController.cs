@@ -1,4 +1,6 @@
 using LightningAgent.Api.DTOs;
+using LightningAgent.Api.Helpers;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -6,6 +8,7 @@ using LightningAgent.Core.Models;
 using LightningAgent.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Options;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
@@ -18,6 +21,8 @@ public class TasksController : ControllerBase
     private readonly IMilestoneRepository _milestoneRepository;
     private readonly ITaskOrchestrator _taskOrchestrator;
     private readonly INaturalLanguageTaskParser _nlParser;
+    private readonly SpendLimitSettings _spendLimits;
+    private readonly ISpendLimitService _spendLimitService;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
@@ -25,12 +30,16 @@ public class TasksController : ControllerBase
         IMilestoneRepository milestoneRepository,
         ITaskOrchestrator taskOrchestrator,
         INaturalLanguageTaskParser nlParser,
+        IOptions<SpendLimitSettings> spendLimitOptions,
+        ISpendLimitService spendLimitService,
         ILogger<TasksController> logger)
     {
         _taskRepository = taskRepository;
         _milestoneRepository = milestoneRepository;
         _taskOrchestrator = taskOrchestrator;
         _nlParser = nlParser;
+        _spendLimits = spendLimitOptions.Value;
+        _spendLimitService = spendLimitService;
         _logger = logger;
     }
 
@@ -63,6 +72,9 @@ public class TasksController : ControllerBase
             return BadRequest($"Invalid TaskType '{request.TaskType}'. Valid values: {string.Join(", ", Enum.GetNames<TaskType>())}");
         if (request.MaxPayoutSats <= 0)
             return BadRequest("MaxPayoutSats must be greater than zero.");
+
+        if (request.MaxPayoutSats > _spendLimits.DefaultPerTaskMaxSats)
+            return BadRequest($"MaxPayoutSats ({request.MaxPayoutSats}) exceeds the per-task limit of {_spendLimits.DefaultPerTaskMaxSats} sats.");
 
         var externalId = Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
@@ -191,12 +203,20 @@ public class TasksController : ControllerBase
         [FromBody] AssignAgentBody body,
         CancellationToken ct)
     {
+        if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
+            return Forbid();
+
         if (body.AgentId <= 0)
             return BadRequest("AgentId must be greater than zero.");
 
         var task = await _taskRepository.GetByIdAsync(id, ct);
         if (task is null)
             return NotFound($"Task {id} not found.");
+
+        // Check agent spend limit before assignment
+        var withinLimit = await _spendLimitService.CheckLimitAsync(body.AgentId, task.MaxPayoutSats, ct);
+        if (!withinLimit)
+            return BadRequest($"Agent {body.AgentId} has exceeded their spend limit. Cannot assign task with {task.MaxPayoutSats} sats payout.");
 
         task.AssignedAgentId = body.AgentId;
         task.Status = TaskStatus.Assigned;
@@ -249,6 +269,21 @@ public class TasksController : ControllerBase
             assignedAgentId = orchestrated.AssignedAgentId,
             message = $"Task {id} orchestration complete."
         });
+    }
+
+    [HttpGet("{id:int}/deliverable")]
+    public async Task<IActionResult> GetDeliverable(int id, CancellationToken ct)
+    {
+        var task = await _taskRepository.GetByIdAsync(id, ct);
+        if (task is null)
+            return NotFound($"Task {id} not found.");
+
+        var deliverable = await _taskOrchestrator.AssembleDeliverableAsync(id, ct);
+
+        if (string.IsNullOrEmpty(deliverable))
+            return NotFound($"No deliverable available for task {id}.");
+
+        return Content(deliverable, "text/plain");
     }
 
     private static TaskDetailResponse MapToDetailResponse(TaskItem t) => new()

@@ -13,6 +13,7 @@ public class Milestone
     public long PayoutSats { get; set; }
     public MilestoneStatus Status { get; set; }
     public string? VerificationResult { get; set; }
+    public string? OutputData { get; set; }
     public string? InvoicePaymentHash { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? VerifiedAt { get; set; }

@@ -84,5 +84,9 @@ public class MigrationRunner
             ALTER TABLE Agents ADD COLUMN ApiKeyHash TEXT;
             ALTER TABLE Agents ADD COLUMN RateLimitPerMinute INTEGER NOT NULL DEFAULT 100;
         ");
+
+        yield return ("1.2.0", "Add OutputData column to Milestones for storing agent output", @"
+            ALTER TABLE Milestones ADD COLUMN OutputData TEXT;
+        ");
     }
 }

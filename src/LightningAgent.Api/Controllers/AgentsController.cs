@@ -185,6 +185,9 @@ public class AgentsController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<AgentDetailResponse>> GetAgent(int id, CancellationToken ct)
     {
+        if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
+            return Forbid();
+
         var agent = await _agentRepository.GetByIdAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");
@@ -231,6 +234,9 @@ public class AgentsController : ControllerBase
         [FromBody] List<AgentCapabilityDto> capabilities,
         CancellationToken ct)
     {
+        if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
+            return Forbid();
+
         var agent = await _agentRepository.GetByIdAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");
@@ -282,6 +288,9 @@ public class AgentsController : ControllerBase
     [HttpGet("{id:int}/assigned-tasks")]
     public async Task<ActionResult<List<TaskDetailResponse>>> GetAssignedTasks(int id, CancellationToken ct)
     {
+        if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
+            return Forbid();
+
         var agent = await _agentRepository.GetByIdAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");
@@ -313,6 +322,9 @@ public class AgentsController : ControllerBase
     [HttpPost("{id:int}/suspend")]
     public async Task<IActionResult> SuspendAgent(int id, CancellationToken ct)
     {
+        if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
+            return Forbid();
+
         var agent = await _agentRepository.GetByIdAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");

@@ -49,27 +49,53 @@ public class EscrowManager : IEscrowManager
             "Creating HODL invoice for milestone {MilestoneId} with {AmountSats} sats",
             milestone.Id, milestone.PayoutSats);
 
-        // Create the HODL invoice on the Lightning node
-        var hodlInvoice = await _lightning.CreateHodlInvoiceAsync(
-            milestone.PayoutSats,
-            $"Escrow for milestone {milestone.Id}",
-            paymentHash,
-            _settings.DefaultExpirySec,
-            ct);
-
-        // Build the Escrow entity
-        var escrow = new Escrow
+        // Attempt to create the HODL invoice on the Lightning node.
+        // If the LND call fails (e.g., no channels available), degrade gracefully
+        // so the orchestration can continue; the escrow will be retried later.
+        Escrow escrow;
+        try
         {
-            MilestoneId = milestone.Id,
-            TaskId = milestone.TaskId,
-            AmountSats = milestone.PayoutSats,
-            PaymentHash = paymentHashHex,
-            PaymentPreimage = preimageHex,
-            Status = EscrowStatus.Held,
-            HodlInvoice = hodlInvoice.PaymentRequest,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = hodlInvoice.ExpiresAt
-        };
+            var hodlInvoice = await _lightning.CreateHodlInvoiceAsync(
+                milestone.PayoutSats,
+                $"Escrow for milestone {milestone.Id}",
+                paymentHash,
+                _settings.DefaultExpirySec,
+                ct);
+
+            escrow = new Escrow
+            {
+                MilestoneId = milestone.Id,
+                TaskId = milestone.TaskId,
+                AmountSats = milestone.PayoutSats,
+                PaymentHash = paymentHashHex,
+                PaymentPreimage = preimageHex,
+                Status = EscrowStatus.Held,
+                HodlInvoice = hodlInvoice.PaymentRequest,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = hodlInvoice.ExpiresAt
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "HODL invoice creation failed for milestone {MilestoneId}. " +
+                "Creating escrow with PendingChannel status for later retry.",
+                milestone.Id);
+
+            escrow = new Escrow
+            {
+                MilestoneId = milestone.Id,
+                TaskId = milestone.TaskId,
+                AmountSats = milestone.PayoutSats,
+                PaymentHash = paymentHashHex,
+                PaymentPreimage = preimageHex,
+                Status = EscrowStatus.PendingChannel,
+                HodlInvoice = string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(_settings.DefaultExpirySec)
+            };
+        }
 
         // Persist escrow
         escrow.Id = await _escrowRepo.CreateAsync(escrow, ct);

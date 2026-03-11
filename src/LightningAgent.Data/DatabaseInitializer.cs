@@ -97,6 +97,7 @@ public class DatabaseInitializer
                 Status TEXT NOT NULL DEFAULT 'Pending',
                 VerificationResult TEXT,
                 InvoicePaymentHash TEXT,
+                OutputData TEXT,
                 CreatedAt TEXT NOT NULL,
                 VerifiedAt TEXT,
                 PaidAt TEXT

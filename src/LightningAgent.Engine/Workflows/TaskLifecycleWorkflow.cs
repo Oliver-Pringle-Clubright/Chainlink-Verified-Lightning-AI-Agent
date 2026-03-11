@@ -69,7 +69,8 @@ public class TaskLifecycleWorkflow
         var milestone = await _milestoneRepo.GetByIdAsync(milestoneId, ct)
             ?? throw new InvalidOperationException($"Milestone {milestoneId} not found");
 
-        // 2. Update status to Verifying
+        // 2. Store agent output and update status to Verifying
+        milestone.OutputData = Convert.ToBase64String(agentOutput);
         milestone.Status = MilestoneStatus.Verifying;
         await _milestoneRepo.UpdateAsync(milestone, ct);
 

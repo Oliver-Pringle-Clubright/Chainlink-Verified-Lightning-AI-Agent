@@ -1,10 +1,12 @@
 using System.Text.Json;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Core.Models.Acp;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
@@ -19,6 +21,7 @@ public class AcpController : ControllerBase
     private readonly ITaskRepository _taskRepository;
     private readonly IAgentRepository _agentRepository;
     private readonly IAgentCapabilityRepository _capabilityRepository;
+    private readonly SpendLimitSettings _spendLimits;
     private readonly ILogger<AcpController> _logger;
 
     public AcpController(
@@ -28,6 +31,7 @@ public class AcpController : ControllerBase
         ITaskRepository taskRepository,
         IAgentRepository agentRepository,
         IAgentCapabilityRepository capabilityRepository,
+        IOptions<SpendLimitSettings> spendLimitOptions,
         ILogger<AcpController> logger)
     {
         _taskOrchestrator = taskOrchestrator;
@@ -36,6 +40,7 @@ public class AcpController : ControllerBase
         _taskRepository = taskRepository;
         _agentRepository = agentRepository;
         _capabilityRepository = capabilityRepository;
+        _spendLimits = spendLimitOptions.Value;
         _logger = logger;
     }
 
@@ -121,6 +126,9 @@ public class AcpController : ControllerBase
             return BadRequest("Title is required.");
         if (string.IsNullOrWhiteSpace(spec.Description))
             return BadRequest("Description is required.");
+
+        if (spec.Budget.MaxSats > _spendLimits.DefaultPerTaskMaxSats)
+            return BadRequest($"Budget MaxSats ({spec.Budget.MaxSats}) exceeds the per-task limit of {_spendLimits.DefaultPerTaskMaxSats} sats.");
 
         var externalId = string.IsNullOrWhiteSpace(spec.TaskId)
             ? Guid.NewGuid().ToString("N")

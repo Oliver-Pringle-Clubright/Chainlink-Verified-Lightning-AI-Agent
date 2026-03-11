@@ -123,6 +123,55 @@ using (var scope = app.Services.CreateScope())
 
     var migrationRunner = scope.ServiceProvider.GetRequiredService<MigrationRunner>();
     await migrationRunner.RunMigrationsAsync();
+
+    // ── Auto-register system agent for all skill types (idempotent) ──
+    var agentRepo = scope.ServiceProvider.GetRequiredService<IAgentRepository>();
+    var existingAgent = await agentRepo.GetByExternalIdAsync("system-builtin");
+    if (existingAgent is null)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Registering system built-in agent with all skill types");
+
+        var systemAgent = new LightningAgent.Core.Models.Agent
+        {
+            ExternalId = "system-builtin",
+            Name = "System Worker Agent",
+            Status = LightningAgent.Core.Enums.AgentStatus.Active,
+            DailySpendCapSats = 1_000_000,
+            WeeklySpendCapSats = 5_000_000,
+            RateLimitPerMinute = 1000,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var agentId = await agentRepo.CreateAsync(systemAgent);
+
+        var capRepo = scope.ServiceProvider.GetRequiredService<IAgentCapabilityRepository>();
+        var skillTypes = new[]
+        {
+            LightningAgent.Core.Enums.SkillType.CodeGeneration,
+            LightningAgent.Core.Enums.SkillType.DataAnalysis,
+            LightningAgent.Core.Enums.SkillType.TextWriting,
+            LightningAgent.Core.Enums.SkillType.ImageGeneration
+        };
+
+        foreach (var skill in skillTypes)
+        {
+            await capRepo.CreateAsync(new LightningAgent.Core.Models.AgentCapability
+            {
+                AgentId = agentId,
+                SkillType = skill,
+                TaskTypes = skill.ToString(),
+                MaxConcurrency = 10,
+                PriceSatsPerUnit = 0,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        logger.LogInformation(
+            "System agent registered with Id {AgentId} and {Count} capabilities",
+            agentId, skillTypes.Length);
+    }
 }
 
 // ── Middleware pipeline ─────────────────────────────────────────────

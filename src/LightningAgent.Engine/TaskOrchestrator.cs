@@ -176,7 +176,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         // Get all subtasks for this task
         var subtasks = await _taskRepo.GetSubtasksAsync(taskId, ct);
 
-        // Collect outputs from milestone VerificationResult fields
+        // Collect outputs from milestone OutputData fields (base64-decoded)
         var subtaskOutputs = new List<string>();
 
         foreach (var subtask in subtasks)
@@ -184,9 +184,10 @@ public class TaskOrchestrator : ITaskOrchestrator
             var milestones = await _milestoneRepo.GetByTaskIdAsync(subtask.Id, ct);
             foreach (var milestone in milestones)
             {
-                if (!string.IsNullOrEmpty(milestone.VerificationResult))
+                if (!string.IsNullOrEmpty(milestone.OutputData))
                 {
-                    subtaskOutputs.Add(milestone.VerificationResult);
+                    var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(milestone.OutputData));
+                    subtaskOutputs.Add(decoded);
                 }
             }
         }

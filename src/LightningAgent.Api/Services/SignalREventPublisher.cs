@@ -3,6 +3,7 @@ namespace LightningAgent.Api.Services;
 using Microsoft.AspNetCore.SignalR;
 using LightningAgent.Api.Hubs;
 using LightningAgent.Core.Events;
+using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Engine;
 
@@ -10,15 +11,18 @@ public class SignalREventPublisher : IEventPublisher
 {
     private readonly IHubContext<AgentNotificationHub> _hub;
     private readonly WebhookDeliveryService _webhookDelivery;
+    private readonly ITaskRepository _taskRepo;
     private readonly ILogger<SignalREventPublisher> _logger;
 
     public SignalREventPublisher(
         IHubContext<AgentNotificationHub> hub,
         WebhookDeliveryService webhookDelivery,
+        ITaskRepository taskRepo,
         ILogger<SignalREventPublisher> logger)
     {
         _hub = hub;
         _webhookDelivery = webhookDelivery;
+        _taskRepo = taskRepo;
         _logger = logger;
     }
 
@@ -40,6 +44,10 @@ public class SignalREventPublisher : IEventPublisher
             milestoneId, taskId, passed, score);
 
         await _hub.Clients.All.SendAsync("MilestoneVerified", evt, ct);
+
+        var task = await _taskRepo.GetByIdAsync(taskId, ct);
+        if (task?.AssignedAgentId is int milestoneAgentId)
+            await _webhookDelivery.DeliverAsync(milestoneAgentId, "MilestoneVerified", evt, ct);
     }
 
     public async Task PublishPaymentSentAsync(int paymentId, int agentId, long amountSats, CancellationToken ct = default)
@@ -62,6 +70,10 @@ public class SignalREventPublisher : IEventPublisher
             disputeId, taskId);
 
         await _hub.Clients.All.SendAsync("DisputeOpened", evt, ct);
+
+        var disputeTask = await _taskRepo.GetByIdAsync(taskId, ct);
+        if (disputeTask?.AssignedAgentId is int disputeAgentId)
+            await _webhookDelivery.DeliverAsync(disputeAgentId, "DisputeOpened", evt, ct);
     }
 
     public async Task PublishEscrowSettledAsync(int escrowId, int milestoneId, long amountSats, CancellationToken ct = default)
@@ -82,6 +94,10 @@ public class SignalREventPublisher : IEventPublisher
             milestoneId, taskId);
 
         await _hub.Clients.All.SendAsync("VerificationFailed", evt, ct);
+
+        var failedTask = await _taskRepo.GetByIdAsync(taskId, ct);
+        if (failedTask?.AssignedAgentId is int failedAgentId)
+            await _webhookDelivery.DeliverAsync(failedAgentId, "VerificationFailed", evt, ct);
     }
 
     public async Task PublishAgentRegisteredAsync(int agentId, string name, CancellationToken ct = default)

@@ -9,7 +9,7 @@ public class MilestoneRepository : IMilestoneRepository
 {
     private readonly SqliteConnectionFactory _connectionFactory;
 
-    private const string SelectColumns = "Id, TaskId, SequenceNumber, Title, Description, VerificationCriteria, PayoutSats, Status, VerificationResult, InvoicePaymentHash, CreatedAt, VerifiedAt, PaidAt";
+    private const string SelectColumns = "Id, TaskId, SequenceNumber, Title, Description, VerificationCriteria, PayoutSats, Status, VerificationResult, InvoicePaymentHash, CreatedAt, VerifiedAt, PaidAt, OutputData";
 
     public MilestoneRepository(SqliteConnectionFactory connectionFactory)
     {
@@ -63,8 +63,8 @@ public class MilestoneRepository : IMilestoneRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"INSERT INTO Milestones (TaskId, SequenceNumber, Title, Description, VerificationCriteria, PayoutSats, Status, VerificationResult, InvoicePaymentHash, CreatedAt, VerifiedAt, PaidAt)
-            VALUES (@TaskId, @SequenceNumber, @Title, @Description, @VerificationCriteria, @PayoutSats, @Status, @VerificationResult, @InvoicePaymentHash, @CreatedAt, @VerifiedAt, @PaidAt);
+        cmd.CommandText = @"INSERT INTO Milestones (TaskId, SequenceNumber, Title, Description, VerificationCriteria, PayoutSats, Status, VerificationResult, InvoicePaymentHash, CreatedAt, VerifiedAt, PaidAt, OutputData)
+            VALUES (@TaskId, @SequenceNumber, @Title, @Description, @VerificationCriteria, @PayoutSats, @Status, @VerificationResult, @InvoicePaymentHash, @CreatedAt, @VerifiedAt, @PaidAt, @OutputData);
             SELECT last_insert_rowid();";
         cmd.Parameters.AddWithValue("@TaskId", milestone.TaskId);
         cmd.Parameters.AddWithValue("@SequenceNumber", milestone.SequenceNumber);
@@ -78,6 +78,7 @@ public class MilestoneRepository : IMilestoneRepository
         cmd.Parameters.AddWithValue("@CreatedAt", milestone.CreatedAt.ToString("o"));
         cmd.Parameters.AddWithValue("@VerifiedAt", milestone.VerifiedAt.HasValue ? milestone.VerifiedAt.Value.ToString("o") : DBNull.Value);
         cmd.Parameters.AddWithValue("@PaidAt", milestone.PaidAt.HasValue ? milestone.PaidAt.Value.ToString("o") : DBNull.Value);
+        cmd.Parameters.AddWithValue("@OutputData", (object?)milestone.OutputData ?? DBNull.Value);
 
         var result = await cmd.ExecuteScalarAsync();
         return Convert.ToInt32(result);
@@ -90,7 +91,7 @@ public class MilestoneRepository : IMilestoneRepository
         cmd.CommandText = @"UPDATE Milestones SET TaskId = @TaskId, SequenceNumber = @SequenceNumber, Title = @Title,
             Description = @Description, VerificationCriteria = @VerificationCriteria, PayoutSats = @PayoutSats,
             Status = @Status, VerificationResult = @VerificationResult, InvoicePaymentHash = @InvoicePaymentHash,
-            VerifiedAt = @VerifiedAt, PaidAt = @PaidAt
+            VerifiedAt = @VerifiedAt, PaidAt = @PaidAt, OutputData = @OutputData
             WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", milestone.Id);
         cmd.Parameters.AddWithValue("@TaskId", milestone.TaskId);
@@ -104,6 +105,7 @@ public class MilestoneRepository : IMilestoneRepository
         cmd.Parameters.AddWithValue("@InvoicePaymentHash", (object?)milestone.InvoicePaymentHash ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@VerifiedAt", milestone.VerifiedAt.HasValue ? milestone.VerifiedAt.Value.ToString("o") : DBNull.Value);
         cmd.Parameters.AddWithValue("@PaidAt", milestone.PaidAt.HasValue ? milestone.PaidAt.Value.ToString("o") : DBNull.Value);
+        cmd.Parameters.AddWithValue("@OutputData", (object?)milestone.OutputData ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync();
     }
@@ -125,7 +127,7 @@ public class MilestoneRepository : IMilestoneRepository
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $@"
             SELECT m.Id, m.TaskId, m.SequenceNumber, m.Title, m.Description, m.VerificationCriteria,
-                   m.PayoutSats, m.Status, m.VerificationResult, m.InvoicePaymentHash, m.CreatedAt, m.VerifiedAt, m.PaidAt
+                   m.PayoutSats, m.Status, m.VerificationResult, m.InvoicePaymentHash, m.CreatedAt, m.VerifiedAt, m.PaidAt, m.OutputData
             FROM Milestones m
             INNER JOIN Tasks t ON m.TaskId = t.Id
             WHERE t.AssignedAgentId = @AgentId AND m.Status = @Status
@@ -170,7 +172,8 @@ public class MilestoneRepository : IMilestoneRepository
             InvoicePaymentHash = reader.IsDBNull(9) ? null : reader.GetString(9),
             CreatedAt = DateTime.Parse(reader.GetString(10)),
             VerifiedAt = reader.IsDBNull(11) ? null : DateTime.Parse(reader.GetString(11)),
-            PaidAt = reader.IsDBNull(12) ? null : DateTime.Parse(reader.GetString(12))
+            PaidAt = reader.IsDBNull(12) ? null : DateTime.Parse(reader.GetString(12)),
+            OutputData = reader.IsDBNull(13) ? null : reader.GetString(13)
         };
     }
 }

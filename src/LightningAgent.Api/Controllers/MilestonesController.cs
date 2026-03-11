@@ -1,5 +1,6 @@
 using System.Text;
 using LightningAgent.Api.DTOs;
+using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -14,6 +15,7 @@ public class MilestonesController : ControllerBase
 {
     private readonly IMilestoneRepository _milestoneRepository;
     private readonly IVerificationRepository _verificationRepository;
+    private readonly ITaskRepository _taskRepository;
     private readonly TaskLifecycleWorkflow _workflow;
     private readonly ITaskOrchestrator _orchestrator;
     private readonly ILogger<MilestonesController> _logger;
@@ -21,12 +23,14 @@ public class MilestonesController : ControllerBase
     public MilestonesController(
         IMilestoneRepository milestoneRepository,
         IVerificationRepository verificationRepository,
+        ITaskRepository taskRepository,
         TaskLifecycleWorkflow workflow,
         ITaskOrchestrator orchestrator,
         ILogger<MilestonesController> logger)
     {
         _milestoneRepository = milestoneRepository;
         _verificationRepository = verificationRepository;
+        _taskRepository = taskRepository;
         _workflow = workflow;
         _orchestrator = orchestrator;
         _logger = logger;
@@ -70,6 +74,20 @@ public class MilestonesController : ControllerBase
         });
     }
 
+    [HttpGet("{id:int}/output")]
+    public async Task<IActionResult> GetMilestoneOutput(int id, CancellationToken ct)
+    {
+        var milestone = await _milestoneRepository.GetByIdAsync(id, ct);
+        if (milestone is null)
+            return NotFound($"Milestone {id} not found.");
+
+        if (string.IsNullOrEmpty(milestone.OutputData))
+            return NotFound($"Milestone {id} has no output data.");
+
+        var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(milestone.OutputData));
+        return Content(decoded, "text/plain");
+    }
+
     [HttpPost("{id:int}/submit")]
     public async Task<IActionResult> SubmitOutput(
         int id,
@@ -79,6 +97,14 @@ public class MilestonesController : ControllerBase
         var milestone = await _milestoneRepository.GetByIdAsync(id, ct);
         if (milestone is null)
             return NotFound($"Milestone {id} not found.");
+
+        // Authorization: verify the authenticated agent is assigned to this milestone's task
+        var task = await _taskRepository.GetByIdAsync(milestone.TaskId, ct);
+        if (task?.AssignedAgentId is int assignedAgentId)
+        {
+            if (!AuthorizationHelper.CanAccessAgent(HttpContext, assignedAgentId))
+                return Forbid();
+        }
 
         if (string.IsNullOrWhiteSpace(request.OutputData))
             return BadRequest("OutputData is required.");
