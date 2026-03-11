@@ -6,6 +6,7 @@ using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Data;
+using LightningAgent.Engine.Workflows;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
@@ -23,6 +24,8 @@ public class TasksController : ControllerBase
     private readonly INaturalLanguageTaskParser _nlParser;
     private readonly SpendLimitSettings _spendLimits;
     private readonly ISpendLimitService _spendLimitService;
+    private readonly ITaskQueue _taskQueue;
+    private readonly TaskLifecycleWorkflow _workflow;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
@@ -32,6 +35,8 @@ public class TasksController : ControllerBase
         INaturalLanguageTaskParser nlParser,
         IOptions<SpendLimitSettings> spendLimitOptions,
         ISpendLimitService spendLimitService,
+        ITaskQueue taskQueue,
+        TaskLifecycleWorkflow workflow,
         ILogger<TasksController> logger)
     {
         _taskRepository = taskRepository;
@@ -40,6 +45,8 @@ public class TasksController : ControllerBase
         _nlParser = nlParser;
         _spendLimits = spendLimitOptions.Value;
         _spendLimitService = spendLimitService;
+        _taskQueue = taskQueue;
+        _workflow = workflow;
         _logger = logger;
     }
 
@@ -284,6 +291,79 @@ public class TasksController : ControllerBase
             return NotFound($"No deliverable available for task {id}.");
 
         return Content(deliverable, "text/plain");
+    }
+
+    [HttpPost("{id:int}/retry")]
+    public async Task<IActionResult> RetryFailedSubtasks(int id, CancellationToken ct)
+    {
+        var task = await _taskRepository.GetByIdAsync(id, ct);
+        if (task is null)
+            return NotFound($"Task {id} not found.");
+
+        var subtasks = await _taskRepository.GetSubtasksAsync(id, ct);
+
+        var retriedCount = 0;
+
+        foreach (var subtask in subtasks)
+        {
+            var milestones = await _milestoneRepository.GetByTaskIdAsync(subtask.Id, ct);
+
+            foreach (var milestone in milestones.Where(m => m.Status == MilestoneStatus.Failed))
+            {
+                _logger.LogInformation(
+                    "Retrying failed milestone {MilestoneId} for subtask {SubtaskId} of task {TaskId}",
+                    milestone.Id, subtask.Id, id);
+
+                await _workflow.ProcessRetryAsync(milestone.Id, ct);
+                retriedCount++;
+            }
+        }
+
+        // Also check milestones directly on the parent task
+        var parentMilestones = await _milestoneRepository.GetByTaskIdAsync(id, ct);
+        foreach (var milestone in parentMilestones.Where(m => m.Status == MilestoneStatus.Failed))
+        {
+            _logger.LogInformation(
+                "Retrying failed milestone {MilestoneId} on task {TaskId}",
+                milestone.Id, id);
+
+            await _workflow.ProcessRetryAsync(milestone.Id, ct);
+            retriedCount++;
+        }
+
+        // Re-set parent task status to InProgress
+        await _taskRepository.UpdateStatusAsync(id, TaskStatus.InProgress, ct);
+
+        _logger.LogInformation(
+            "Task {TaskId} retry complete: {RetriedCount} milestones retried", id, retriedCount);
+
+        return Ok(new
+        {
+            taskId = id,
+            retriedMilestones = retriedCount,
+            message = $"Retried {retriedCount} failed milestone(s). Task status set to InProgress."
+        });
+    }
+
+    [HttpPost("{id:int}/enqueue")]
+    public async Task<IActionResult> EnqueueTask(int id, CancellationToken ct)
+    {
+        var task = await _taskRepository.GetByIdAsync(id, ct);
+        if (task is null)
+            return NotFound($"Task {id} not found.");
+
+        if (task.Status is not (TaskStatus.Pending or TaskStatus.Assigned))
+            return BadRequest($"Task {id} is in status '{task.Status}' and cannot be enqueued. Only Pending or Assigned tasks can be queued.");
+
+        _logger.LogInformation("Enqueuing task {TaskId} for background orchestration", id);
+
+        await _taskQueue.EnqueueAsync(id, ct);
+
+        return Accepted(new
+        {
+            taskId = id,
+            message = $"Task {id} has been enqueued for background orchestration."
+        });
     }
 
     private static TaskDetailResponse MapToDetailResponse(TaskItem t) => new()

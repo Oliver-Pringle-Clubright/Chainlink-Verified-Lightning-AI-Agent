@@ -1,8 +1,12 @@
+using System.Security.Cryptography;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
+using LightningAgent.Core.Models.Chainlink;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using VerificationEntity = LightningAgent.Core.Models.Verification;
 
 namespace LightningAgent.Engine.Workflows;
@@ -18,6 +22,8 @@ public class TaskLifecycleWorkflow
     private readonly IPaymentService _paymentService;
     private readonly IReputationService _reputationService;
     private readonly IEventPublisher _eventPublisher;
+    private readonly IChainlinkFunctionsClient _chainlinkFunctions;
+    private readonly ChainlinkSettings _chainlinkSettings;
     private readonly ILogger<TaskLifecycleWorkflow> _logger;
 
     /// <summary>
@@ -36,6 +42,8 @@ public class TaskLifecycleWorkflow
         IPaymentService paymentService,
         IReputationService reputationService,
         IEventPublisher eventPublisher,
+        IChainlinkFunctionsClient chainlinkFunctions,
+        IOptions<ChainlinkSettings> chainlinkSettings,
         ILogger<TaskLifecycleWorkflow> logger)
     {
         _taskRepo = taskRepo;
@@ -47,6 +55,8 @@ public class TaskLifecycleWorkflow
         _paymentService = paymentService;
         _reputationService = reputationService;
         _eventPublisher = eventPublisher;
+        _chainlinkFunctions = chainlinkFunctions;
+        _chainlinkSettings = chainlinkSettings.Value;
         _logger = logger;
     }
 
@@ -146,6 +156,37 @@ public class TaskLifecycleWorkflow
                     verificationPassed: true,
                     responseTimeSec: 0.0,
                     ct);
+            }
+
+            // 6e. Post on-chain verification proof via Chainlink Functions
+            if (!string.IsNullOrEmpty(_chainlinkSettings.FunctionsRouterAddress))
+            {
+                try
+                {
+                    var proofHash = Convert.ToHexString(
+                        SHA256.HashData(agentOutput)).ToLowerInvariant();
+
+                    var request = new ChainlinkFunctionRequest
+                    {
+                        Source = $"return Functions.encodeString('{proofHash}');",
+                        Args = new List<string> { proofHash },
+                        SubscriptionId = _chainlinkSettings.SubscriptionId,
+                        DonId = _chainlinkSettings.DonId,
+                        CallbackGasLimit = 300_000
+                    };
+
+                    var txHash = await _chainlinkFunctions.SendRequestAsync(request, ct);
+                    _logger.LogInformation(
+                        "On-chain verification proof submitted for milestone {MilestoneId}, proofHash={ProofHash}, txHash={TxHash}",
+                        milestoneId, proofHash, txHash);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to post on-chain verification proof for milestone {MilestoneId} — milestone still passed",
+                        milestoneId);
+                }
             }
         }
         else

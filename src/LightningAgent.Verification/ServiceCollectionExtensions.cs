@@ -1,4 +1,5 @@
 using LightningAgent.Core.Interfaces.Services;
+using LightningAgent.Verification.Plugins;
 using LightningAgent.Verification.Strategies;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +15,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVerificationStrategy, SchemaValidationVerification>();
         services.AddScoped<IVerificationStrategy, TextSimilarityVerification>();
         services.AddScoped<IVerificationStrategy, ClipScoreVerification>();
+
+        // Plugin verification system
+        services.AddScoped<IVerificationPlugin, CodeQualityPlugin>();
+        services.AddScoped<IVerificationPlugin, DataIntegrityPlugin>();
+        services.AddScoped<IVerificationPlugin, TextQualityPlugin>();
+        services.AddScoped<PluginVerificationRunner>();
+
         return services;
     }
 }

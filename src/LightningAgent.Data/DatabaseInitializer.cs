@@ -180,17 +180,22 @@ public class DatabaseInitializer
             )",
             @"CREATE INDEX IF NOT EXISTS IX_PriceCache_Pair_FetchedAt ON PriceCache(Pair, FetchedAt)",
 
-            // AuditLog
+            // AuditLog (enriched with AgentId, Action, IpAddress, UserAgent)
             @"CREATE TABLE IF NOT EXISTS AuditLog (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 EventType TEXT NOT NULL,
                 EntityType TEXT NOT NULL,
                 EntityId INTEGER NOT NULL,
+                AgentId INTEGER,
+                Action TEXT,
                 Details TEXT,
+                IpAddress TEXT,
+                UserAgent TEXT,
                 CreatedAt TEXT NOT NULL
             )",
             @"CREATE INDEX IF NOT EXISTS IX_AuditLog_EventType ON AuditLog(EventType)",
             @"CREATE INDEX IF NOT EXISTS IX_AuditLog_EntityType_EntityId ON AuditLog(EntityType, EntityId)",
+            @"CREATE INDEX IF NOT EXISTS IX_AuditLog_AgentId ON AuditLog(AgentId)",
 
             // SpendLimits
             @"CREATE TABLE IF NOT EXISTS SpendLimits (
@@ -218,9 +223,17 @@ public class DatabaseInitializer
 
         foreach (var sql in statements)
         {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = sql;
-            await cmd.ExecuteNonQueryAsync();
+            try
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = sql;
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 1)
+            {
+                // Column/table may not exist yet if the DB was created by an older version.
+                // Migrations will add the missing columns after initialization.
+            }
         }
     }
 }

@@ -88,5 +88,13 @@ public class MigrationRunner
         yield return ("1.2.0", "Add OutputData column to Milestones for storing agent output", @"
             ALTER TABLE Milestones ADD COLUMN OutputData TEXT;
         ");
+
+        yield return ("1.3.0", "Enrich AuditLog with AgentId, Action, IpAddress, UserAgent columns", @"
+            ALTER TABLE AuditLog ADD COLUMN AgentId INTEGER;
+            ALTER TABLE AuditLog ADD COLUMN Action TEXT;
+            ALTER TABLE AuditLog ADD COLUMN IpAddress TEXT;
+            ALTER TABLE AuditLog ADD COLUMN UserAgent TEXT;
+            CREATE INDEX IF NOT EXISTS IX_AuditLog_AgentId ON AuditLog(AgentId);
+        ");
     }
 }

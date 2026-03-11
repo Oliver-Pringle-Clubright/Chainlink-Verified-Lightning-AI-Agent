@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.3.0 -- comprehensive technical reference.
 
 ---
 
@@ -15,10 +15,12 @@
 | Lightning | LND REST API v2 | via `HttpClient` + macaroon auth |
 | Blockchain | Ethereum (Sepolia / Mainnet) | via Nethereum 4.x |
 | Oracles | Chainlink (Functions, VRF, Automation, Price Feeds) | Sepolia / Mainnet contracts |
-| AI | Claude API (Anthropic) | API version `2023-06-01`, default model `claude-sonnet-4-20250514` |
+| AI (Primary) | Claude API (Anthropic) | API version `2023-06-01`, default model `claude-sonnet-4-20250514` |
+| AI (Multi-model) | OpenRouter | OpenAI-compatible chat completions API, task-type model selection |
 | Protocol | ACP (Agentic Commerce Protocol) | Custom REST implementation |
+| Authentication | JWT Bearer | HMAC-SHA256 via `Microsoft.AspNetCore.Authentication.JwtBearer` |
 | Real-time | ASP.NET SignalR | Built-in with `Microsoft.AspNetCore.SignalR` |
-| API Docs | Swagger / OpenAPI | Swashbuckle.AspNetCore 7.x |
+| API Docs | Swagger / OpenAPI + Scalar | Swashbuckle.AspNetCore 7.x + Scalar.AspNetCore |
 | Testing | xUnit | 2.9.3 + Microsoft.NET.Test.Sdk 17.14.1 |
 | Coverage | Coverlet | 6.0.4 |
 | Resilience | Polly (via Microsoft.Extensions.Http.Resilience) | 10.0.0-preview |
@@ -28,7 +30,7 @@
 
 ## 2. Database Schema
 
-The database is SQLite, initialized on application startup by `DatabaseInitializer.InitializeAsync()`. All 15 tables are defined below in the exact DDL used at runtime.
+The database is SQLite, initialized on application startup by `DatabaseInitializer.InitializeAsync()`. All tables are defined below in the exact DDL used at runtime.
 
 ### 2.1 Agents
 
@@ -314,7 +316,7 @@ CREATE TABLE IF NOT EXISTS __Migrations (
 
 ## 3. API Reference
 
-All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `CorrelationIdMiddleware` (reads/generates `X-Correlation-Id`), `ApiKeyAuthMiddleware` (multi-tenant: global key or per-agent SHA256-hashed key, skipped for `/api/health` and `/swagger`), `RateLimitingMiddleware` (per-agent rate from DB, fallback 100 req/min per IP).
+All endpoints are served under the ASP.NET MVC controller framework. The middleware pipeline applies (in order): `ExceptionHandlingMiddleware`, `CorrelationIdMiddleware` (reads/generates `X-Correlation-Id`), `ApiKeyAuthMiddleware` (multi-tenant: global key or per-agent SHA256-hashed key, skipped for `/api/health` and `/swagger`), `RateLimitingMiddleware` (per-agent rate from DB, fallback 100 req/min per IP), `AuditLoggingMiddleware` (captures all API calls to the `AuditLog` table, skipping health/swagger/SignalR/static file paths). After middleware, `UseAuthentication()` and `UseAuthorization()` run for JWT bearer validation when configured.
 
 ### 3.1 Tasks API
 
@@ -902,7 +904,7 @@ Uses simple midpoint negotiation: `proposedPrice = (requesterBudget + workerAski
 
 #### `GET /api/health` -- Health Check
 
-Two implementations exist (controller + minimal API route). The controller version tests database connectivity.
+Tests database connectivity.
 
 **Response:**
 ```json
@@ -917,7 +919,236 @@ Two implementations exist (controller + minimal API route). The controller versi
 
 ---
 
-### 3.9 SignalR Hub
+#### `GET /api/health/detailed` -- Detailed Health Check
+
+Runs all registered ASP.NET health checks (including `ClaudeApiHealthCheck`) and returns per-check results.
+
+**Response:**
+```json
+{
+  "status": "Healthy",
+  "database": "connected",
+  "checks": {
+    "claude-api": {
+      "status": "Healthy",
+      "description": "Claude API key is configured (model: claude-sonnet-4-20250514). Anthropic API reachable (HTTP 200).",
+      "duration": 342.5
+    }
+  },
+  "totalDuration": 350.2,
+  "timestamp": "2026-01-01T12:00:00Z"
+}
+```
+
+The `ClaudeApiHealthCheck` verifies that the Claude API key is configured and that the Anthropic API is reachable. Returns `Unhealthy` if no key is set, `Degraded` if the API cannot be reached, and `Healthy` if connectivity is confirmed.
+
+**Status Codes:** `200 OK` (healthy), `503 Service Unavailable` (degraded/unhealthy)
+
+---
+
+### 3.9 Tasks API -- Additional Endpoints
+
+#### `POST /api/tasks/{id}/retry` -- Retry Failed Subtasks
+
+**Path Parameters:** `id` (int, parent task ID)
+
+Finds all milestones with `Failed` status on the task's subtasks and on the task itself, and reprocesses each via `TaskLifecycleWorkflow.ProcessRetryAsync()`. Sets the parent task status back to `InProgress`.
+
+**Response:**
+```json
+{
+  "taskId": 1,
+  "retriedMilestones": 3,
+  "message": "Retried 3 failed milestone(s). Task status set to InProgress."
+}
+```
+
+**Status Codes:** `200 OK`, `404 Not Found`
+
+---
+
+#### `POST /api/tasks/{id}/enqueue` -- Enqueue Task for Background Orchestration
+
+**Path Parameters:** `id` (int)
+
+Validates the task exists and is in `Pending` or `Assigned` status, then enqueues it in the `TaskQueue` for background orchestration by `TaskQueueProcessor`.
+
+**Response:**
+```json
+{
+  "taskId": 1,
+  "message": "Task 1 has been enqueued for background orchestration."
+}
+```
+
+**Status Codes:** `202 Accepted`, `400 Bad Request`, `404 Not Found`
+
+---
+
+### 3.10 Auth API (JWT Authentication)
+
+#### `POST /api/auth/token` -- Get JWT Token
+
+Exchanges an API key (global admin or per-agent) for a JWT bearer token.
+
+**Request Body:**
+```json
+{
+  "apiKey": "string (required)"
+}
+```
+
+**Response** (`TokenResponse`):
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresIn": 3600,
+  "tokenType": "Bearer"
+}
+```
+
+**Token Claims:**
+- `sub`: Agent ID
+- `agentId`: Agent ID (integer)
+- `externalId`: Agent external ID
+- `name`: Agent name
+- Roles: `Agent` (always), `Admin` (when authenticated with global admin key)
+
+**Status Codes:** `200 OK`, `400 Bad Request`, `401 Unauthorized`
+
+---
+
+#### `POST /api/auth/refresh` -- Refresh JWT Token
+
+Exchanges a still-valid JWT token for a new one with a fresh expiry.
+
+**Request Body:**
+```json
+{
+  "token": "string (required, existing valid JWT)"
+}
+```
+
+**Response:** Same as `TokenResponse` above.
+
+**Status Codes:** `200 OK`, `400 Bad Request`, `401 Unauthorized`
+
+---
+
+### 3.11 Analytics API
+
+#### `GET /api/analytics/summary` -- System Summary
+
+Returns aggregate task counts by status, average completion time, total sats/USD spent.
+
+**Response** (`SystemSummary`):
+```json
+{
+  "totalTasks": 156,
+  "pendingTasks": 12,
+  "inProgressTasks": 8,
+  "completedTasks": 130,
+  "failedTasks": 4,
+  "disputedTasks": 2,
+  "avgCompletionTimeSec": 1820.5,
+  "totalSatsSpent": 4500000,
+  "totalUsdSpent": 4387.50,
+  "totalAgents": 42,
+  "activeAgents": 38,
+  "heldEscrowSats": 150000,
+  "generatedAt": "2026-01-01T12:00:00Z"
+}
+```
+
+**Status Codes:** `200 OK`
+
+---
+
+#### `GET /api/analytics/agents` -- Per-Agent Statistics
+
+Returns per-agent stats: tasks completed, average verification score, total earned.
+
+**Response:** `List<AgentStats>`
+
+**Status Codes:** `200 OK`
+
+---
+
+#### `GET /api/analytics/timeline` -- Daily Task Timeline
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | int | `30` | Number of days of history (1-365) |
+
+Returns daily task counts for the specified period.
+
+**Response:** `List<TimelineEntry>`
+
+**Status Codes:** `200 OK`
+
+---
+
+### 3.12 Secrets API
+
+#### `POST /api/secrets/rotate/claude` -- Rotate Claude API Key
+
+Admin-only endpoint. Updates the Claude API key in the in-memory configuration.
+
+**Request Body:**
+```json
+{
+  "newKey": "string (required)"
+}
+```
+
+**Status Codes:** `200 OK`, `400 Bad Request`, `403 Forbidden`
+
+---
+
+#### `POST /api/secrets/rotate/openrouter` -- Rotate OpenRouter API Key
+
+Admin-only endpoint. Updates the OpenRouter API key in the in-memory configuration.
+
+**Request Body:** Same as above.
+
+**Status Codes:** `200 OK`, `400 Bad Request`, `403 Forbidden`
+
+---
+
+#### `GET /api/secrets/status` -- Check API Key Status
+
+Admin-only endpoint. Reports the validity of all configured API keys without exposing key values.
+
+**Response:**
+```json
+{
+  "claude": {
+    "configured": true,
+    "valid": true,
+    "message": "API key is valid"
+  },
+  "openRouter": {
+    "configured": false,
+    "valid": null,
+    "message": "No API key configured"
+  }
+}
+```
+
+**Status Codes:** `200 OK`, `403 Forbidden`
+
+---
+
+### 3.13 Dashboard
+
+#### `GET /dashboard` -- Dashboard Redirect
+
+Redirects to the static `/dashboard.html` page served from `wwwroot`. The dashboard provides a real-time web UI with SignalR-powered live updates for task status, agent activity, and escrow state.
+
+---
+
+### 3.14 SignalR Hub
 
 **Hub URL:** `/hubs/agent-notifications`
 
@@ -927,6 +1158,10 @@ Two implementations exist (controller + minimal API route). The controller versi
 |--------|-----------|-------------|
 | `JoinAgentGroup` | `agentId: string` | Subscribe to agent-specific events (group `agent-{agentId}`) |
 | `LeaveAgentGroup` | `agentId: string` | Unsubscribe from agent-specific events |
+| `SubscribeToTask` | `taskId: int` | Subscribe to task-specific events (group `task-{taskId}`) |
+| `UnsubscribeFromTask` | `taskId: int` | Unsubscribe from task-specific events |
+| `SubscribeToAgent` | `agentId: string` | Subscribe to agent-specific events (group `agent-{agentId}`) |
+| `GetLiveStatus` | *(none)* | Returns a snapshot of current system status (task counts, agent counts, held escrows) |
 
 **Server-to-Client Events:**
 
@@ -938,10 +1173,18 @@ Two implementations exist (controller + minimal API route). The controller versi
 | `DisputeOpened` | A dispute has been filed against a task/milestone |
 | `EscrowSettled` | A HODL invoice escrow has been settled |
 | `VerificationFailed` | A milestone verification has failed |
+| `AgentRegistered` | A new agent has been registered |
+| `Subscribed` | Confirmation of subscription to a group |
+| `Unsubscribed` | Confirmation of unsubscription from a group |
+
+**Event Routing:** The `SignalREventPublisher` sends events to three targets simultaneously:
+1. `Clients.All` -- broadcast to all connected clients
+2. `Group("task-{taskId}")` -- task-specific subscribers
+3. `Group("agent-{agentId}")` -- agent-specific subscribers
 
 ---
 
-### 3.10 Stats API
+### 3.15 Stats API
 
 #### `GET /api/stats` -- Marketplace Dashboard
 
@@ -1094,6 +1337,30 @@ Read directly from `IConfiguration` (no strongly-typed settings class).
 |----------|------|---------|-------------|
 | `ApiKey` | string | *(empty)* | API key for authenticating client requests. When empty, all requests are allowed (dev mode). Checked via the `X-Api-Key` header. |
 
+### 4.12 Jwt
+
+**Settings class:** `LightningAgent.Core.Configuration.JwtSettings`
+**Config path:** `Jwt`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Secret` | string | `""` | HMAC-SHA256 signing key for JWT tokens. When empty, JWT authentication is not registered. Must be at least 32 characters for adequate security. |
+| `Issuer` | string | `LightningAgent` | JWT issuer claim (`iss`). |
+| `Audience` | string | `LightningAgent` | JWT audience claim (`aud`). |
+| `ExpiryMinutes` | int | `60` | Token lifetime in minutes. |
+
+### 4.13 OpenRouter
+
+**Settings class:** `LightningAgent.Core.Configuration.OpenRouterSettings`
+**Config path:** `OpenRouter`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ApiKey` | string | `""` | OpenRouter API key. When empty, all AI requests are routed to the primary Claude client. |
+| `BaseUrl` | string | `https://openrouter.ai/api/v1` | OpenRouter API base URL. |
+| `DefaultModel` | string | `anthropic/claude-sonnet-4-20250514` | Default model used when no task-type mapping matches. |
+| `TaskTypeModels` | `Dictionary<string, string>` | `{}` | Maps task type keywords (found in system prompts) to model identifiers. Example: `{ "Code": "anthropic/claude-sonnet-4-20250514", "Data": "google/gemini-pro" }`. |
+
 ---
 
 ## 5. Verification Strategies
@@ -1125,6 +1392,18 @@ The `verificationCriteria` field is expected to be a JSON object. Recognized fie
 - `taskType`: Used by `VerificationPipeline.ParseTaskType()` to select applicable strategies. Defaults to `Text` if absent.
 - `expectedFields`: Used by `SchemaValidationVerification` to check for required JSON properties.
 - `keywords`: Used by `TextSimilarityVerification` to check for required terms.
+
+### Verification Plugins
+
+In addition to the five built-in strategies, the system supports `IVerificationPlugin` implementations. The `PluginVerificationRunner` discovers registered plugins, filters by `SupportedTaskTypes`, and runs matching plugins in parallel via `Task.WhenAll`.
+
+| Plugin | Task Types | Scoring |
+|--------|-----------|---------|
+| **CodeQualityPlugin** | `Code` | Minimum length (0.2), code keyword density (0.15-0.3), balanced delimiters (0.25), no excessive repetition (0.25). Pass threshold: 0.6. |
+| **DataIntegrityPlugin** | `Data` | Validates data structure completeness and integrity. |
+| **TextQualityPlugin** | `Text` | Assesses text quality metrics including coherence and completeness. |
+
+Plugins are registered in `AddVerificationServices()` and run alongside the standard strategies. Each plugin returns a `VerificationResult` with score, pass/fail, and details. Exceptions in individual plugins are caught and logged without affecting other plugins.
 
 ---
 
@@ -1230,24 +1509,26 @@ The system uses LND HODL invoices for trustless escrow. Implemented in `Lightnin
                   (generate preimage, hash,
                    create HODL invoice on LND)
                            |
-                     +-----v-----+
-                     |   Held    |
-                     +-----+-----+
-                          / \
-                         /   \
-        Verification    /     \   Verification fail
-        pass           /       \  or expiry
-                      /         \
-               +-----v---+  +---v-------+
-               | Settled  |  | Cancelled |
-               +----------+  +----------+
+                     +-----v-----+           +----------------+
+                     |   Held    |           | PendingChannel |
+                     +-----+-----+           +-------+--------+
+                          / \                        |
+                         /   \           EscrowRetryService
+        Verification    /     \          retries HODL invoice
+        pass           /       \         creation every 5 min
+                      /         \                |
+               +-----v---+  +---v-------+       |
+               | Settled  |  | Cancelled | <-----+
+               +----------+  +-----------+ (on success -> Held)
 ```
 
 ### Detailed Flow
 
-1. **Created -> Held**: `CreateEscrowAsync(milestone)` generates a 32-byte random preimage, computes its SHA-256 hash, creates a HODL invoice on LND via `ILightningClient.CreateHodlInvoiceAsync()`, and persists the escrow with status `Held`.
+1. **Created -> Held**: `CreateEscrowAsync(milestone)` generates a 32-byte random preimage, computes its SHA-256 hash, creates a HODL invoice on LND via `ILightningClient.CreateHodlInvoiceAsync()`, and persists the escrow with status `Held`. If the HODL invoice creation fails (e.g., LND node temporarily unreachable), the escrow is created with status `PendingChannel`.
 
-2. **Held -> Settled**: `SettleEscrowAsync(escrowId, preimage)` reveals the preimage to LND via `ILightningClient.SettleInvoiceAsync()`, which releases the held funds. Status becomes `Settled`, `SettledAt` is recorded.
+2. **PendingChannel -> Held**: The `EscrowRetryService` background job runs every 5 minutes. It queries all escrows with `PendingChannel` status and retries HODL invoice creation. On success, the escrow transitions to `Held`.
+
+3. **Held -> Settled**: `SettleEscrowAsync(escrowId, preimage)` reveals the preimage to LND via `ILightningClient.SettleInvoiceAsync()`, which releases the held funds. Status becomes `Settled`, `SettledAt` is recorded. The `InvoiceStatusPoller` also detects externally settled invoices every 30 seconds.
 
 3. **Held -> Cancelled**: `CancelEscrowAsync(escrowId)` calls `ILightningClient.CancelInvoiceAsync()` with the payment hash, returning held funds to the payer. Status becomes `Cancelled`.
 
@@ -1267,6 +1548,10 @@ All background services extend `BackgroundService` and run as hosted services re
 | **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF, uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Logs warnings for anomaly scores > 0.7. |
 | **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Calls `IPricingService.GetBtcUsdPriceAsync()` which fetches the latest BTC/USD price from the Chainlink price feed oracle and caches it in the `PriceCache` table. |
 | **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch). |
+| **EscrowRetryService** | `LightningAgent.Engine.BackgroundJobs.EscrowRetryService` | 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on initial attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, updates escrow to `Held` with the new invoice. On failure, logs warning and retries next cycle. |
+| **InvoiceStatusPoller** | `LightningAgent.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |
+| **SecretRotationService** | `LightningAgent.Engine.Services.SecretRotationService` | 6 hours | Validates Claude and OpenRouter API keys by issuing lightweight requests to `GET /v1/models` (Anthropic) and `GET /models` (OpenRouter). Logs warnings when keys are invalid (HTTP 401) or unreachable. |
+| **TaskQueueProcessor** | `LightningAgent.Engine.Queue.TaskQueueProcessor` | Continuous | Dequeues task IDs from `ITaskQueue` (backed by `System.Threading.Channels.Channel<int>`) and orchestrates each via `ITaskOrchestrator.OrchestrateTaskAsync()` inside a fresh DI scope. |
 
 All services use graceful shutdown: they catch `OperationCanceledException` when the `stoppingToken` is cancelled and exit cleanly. Services that require scoped dependencies (repositories, clients) create a scope via `IServiceScopeFactory`.
 
@@ -1326,6 +1611,9 @@ All services use graceful shutdown: they catch `OperationCanceledException` when
 |---------|---------|
 | `Microsoft.AspNetCore.OpenApi` | 10.0.1 |
 | `Swashbuckle.AspNetCore` | 7.* |
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | 10.0.0-preview.* |
+| `Scalar.AspNetCore` | latest |
+| `System.IdentityModel.Tokens.Jwt` | latest |
 
 #### LightningAgent.Tests
 | Package | Version |

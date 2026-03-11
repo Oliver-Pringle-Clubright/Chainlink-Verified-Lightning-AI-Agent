@@ -10,4 +10,12 @@ public interface ILightningClient
     Task<PaymentRoute> SendPaymentAsync(string paymentRequest, CancellationToken ct = default);
     Task<InvoiceState> GetInvoiceStateAsync(byte[] paymentHash, CancellationToken ct = default);
     Task<LndInfo> GetInfoAsync(CancellationToken ct = default);
+
+    // Channel management
+    Task<ChannelBalance> GetChannelBalanceAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<LndChannel>> ListChannelsAsync(CancellationToken ct = default);
+    Task<OpenChannelResult> OpenChannelAsync(string nodePubkey, long localAmountSats, CancellationToken ct = default);
+
+    // Multi-path payment support
+    Task<MultiPathPaymentResult> SendPaymentAsync(string paymentRequest, long amountSats, bool allowMultiPath = true, CancellationToken ct = default);
 }

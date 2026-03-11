@@ -16,8 +16,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAiServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<ClaudeAiSettings>(configuration.GetSection("ClaudeAi"));
+        services.Configure<OpenRouterSettings>(configuration.GetSection("OpenRouter"));
 
-        services.AddHttpClient<IClaudeAiClient, ClaudeApiClient>(client =>
+        // Primary Claude API client
+        services.AddHttpClient<ClaudeApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.anthropic.com");
             client.Timeout = TimeSpan.FromMinutes(2);
@@ -27,6 +29,15 @@ public static class ServiceCollectionExtensions
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
             options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(5);
+        });
+
+        // Register ClaudeApiClient as the primary IClaudeAiClient
+        services.AddScoped<IClaudeAiClient>(sp => sp.GetRequiredService<ClaudeApiClient>());
+
+        // MultiModelClient (secondary) — uses OpenRouter with ClaudeApiClient as fallback
+        services.AddHttpClient<MultiModelClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(2);
         });
 
         services.AddScoped<INaturalLanguageTaskParser, NaturalLanguageTaskParser>();

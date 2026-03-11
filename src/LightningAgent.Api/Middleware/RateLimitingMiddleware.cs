@@ -7,13 +7,18 @@ public class RateLimitingMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<RateLimitingMiddleware> _logger;
 
-    private const int MaxRequestsPerMinute = 100;
+    private const int DefaultMaxRequestsPerMinute = 60;
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
 
-    private static readonly ConcurrentDictionary<string, ClientRequestInfo> Clients = new();
+    private static readonly ConcurrentDictionary<string, (int count, DateTime window)> Clients = new();
     private static DateTime _lastCleanup = DateTime.UtcNow;
     private static readonly object CleanupLock = new();
+
+    private static readonly string[] SkipPaths =
+    {
+        "/api/health", "/openapi", "/scalar"
+    };
 
     public RateLimitingMiddleware(RequestDelegate next, ILogger<RateLimitingMiddleware> logger)
     {
@@ -25,8 +30,8 @@ public class RateLimitingMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // Skip rate limiting for health endpoint
-        if (path.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase))
+        // Skip rate limiting for health, openapi, and scalar paths
+        if (SkipPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);
             return;
@@ -41,63 +46,60 @@ public class RateLimitingMiddleware
             rateLimitKey = $"agent-{agentId}";
             limit = context.Items.TryGetValue("AuthenticatedAgentRateLimit", out var rlObj) && rlObj is int rl
                 ? rl
-                : MaxRequestsPerMinute;
+                : DefaultMaxRequestsPerMinute;
         }
         else
         {
             rateLimitKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            limit = MaxRequestsPerMinute;
+            limit = DefaultMaxRequestsPerMinute;
         }
 
         // Periodic cleanup of stale entries
         CleanupStaleEntries();
 
-        var clientInfo = Clients.GetOrAdd(rateLimitKey, _ => new ClientRequestInfo());
+        var now = DateTime.UtcNow;
+        var exceeded = false;
 
-        lock (clientInfo)
-        {
-            var now = DateTime.UtcNow;
-
-            // Remove timestamps outside the current window
-            while (clientInfo.RequestTimestamps.Count > 0 &&
-                   now - clientInfo.RequestTimestamps.Peek() > Window)
+        Clients.AddOrUpdate(
+            rateLimitKey,
+            // Factory: first request for this key
+            _ => (1, now),
+            // Update: check window and count
+            (_, existing) =>
             {
-                clientInfo.RequestTimestamps.Dequeue();
-            }
-
-            if (clientInfo.RequestTimestamps.Count >= limit)
-            {
-                _logger.LogWarning(
-                    "Rate limit exceeded for client {ClientKey} ({Count} requests in window, limit {Limit})",
-                    rateLimitKey, clientInfo.RequestTimestamps.Count, limit);
-
-                context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                context.Response.ContentType = "application/problem+json";
-                context.Response.Headers["Retry-After"] = "60";
-
-                // Write response synchronously inside lock, then return
-                var problem = new
+                if (now - existing.window > Window)
                 {
-                    type = "https://tools.ietf.org/html/rfc6585#section-4",
-                    title = "Too Many Requests",
-                    status = 429,
-                    detail = $"Rate limit of {limit} requests per minute exceeded.",
-                    traceId = context.TraceIdentifier
-                };
+                    // Window expired, start new window
+                    return (1, now);
+                }
 
-                // We need to write outside the lock to avoid async-in-lock issues
-                clientInfo.Blocked = true;
-                clientInfo.BlockedProblem = problem;
-                return;
-            }
+                if (existing.count >= limit)
+                {
+                    exceeded = true;
+                    return existing; // Don't increment further
+                }
 
-            clientInfo.RequestTimestamps.Enqueue(now);
-            clientInfo.Blocked = false;
-        }
+                return (existing.count + 1, existing.window);
+            });
 
-        if (clientInfo.Blocked && clientInfo.BlockedProblem is not null)
+        if (exceeded)
         {
-            await context.Response.WriteAsJsonAsync(clientInfo.BlockedProblem);
+            _logger.LogWarning(
+                "Rate limit exceeded for client {ClientKey} (limit {Limit} req/min)",
+                rateLimitKey, limit);
+
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.Response.ContentType = "application/problem+json";
+            context.Response.Headers["Retry-After"] = "60";
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                type = "https://tools.ietf.org/html/rfc6585#section-4",
+                title = "Too Many Requests",
+                status = 429,
+                detail = $"Rate limit of {limit} requests per minute exceeded.",
+                traceId = context.TraceIdentifier
+            });
             return;
         }
 
@@ -118,14 +120,7 @@ public class RateLimitingMiddleware
             _lastCleanup = now;
 
             var staleKeys = Clients
-                .Where(kvp =>
-                {
-                    lock (kvp.Value)
-                    {
-                        return kvp.Value.RequestTimestamps.Count == 0 ||
-                               now - kvp.Value.RequestTimestamps.Peek() > Window;
-                    }
-                })
+                .Where(kvp => now - kvp.Value.window > Window)
                 .Select(kvp => kvp.Key)
                 .ToList();
 
@@ -134,12 +129,5 @@ public class RateLimitingMiddleware
                 Clients.TryRemove(key, out _);
             }
         }
-    }
-
-    private sealed class ClientRequestInfo
-    {
-        public Queue<DateTime> RequestTimestamps { get; } = new();
-        public bool Blocked { get; set; }
-        public object? BlockedProblem { get; set; }
     }
 }

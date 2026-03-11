@@ -1,3 +1,4 @@
+using LightningAgent.Chainlink.Services;
 using LightningAgent.Core.Interfaces.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,6 +12,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChainlinkFunctionsClient, ChainlinkFunctionsClient>();
         services.AddScoped<IChainlinkVrfClient, ChainlinkVrfClient>();
         services.AddScoped<IChainlinkAutomationClient, ChainlinkAutomationClient>();
+        services.AddScoped<AutomationService>();
         return services;
     }
 }

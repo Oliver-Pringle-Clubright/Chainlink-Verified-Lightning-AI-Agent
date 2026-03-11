@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightning Agent Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #242836;
+            --border: #2e3347;
+            --text: #e1e4ed;
+            --text-dim: #8b8fa3;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --green: #22c55e;
+            --green-bg: rgba(34, 197, 94, 0.12);
+            --red: #ef4444;
+            --red-bg: rgba(239, 68, 68, 0.12);
+            --yellow: #eab308;
+            --yellow-bg: rgba(234, 179, 8, 0.12);
+            --blue: #3b82f6;
+            --blue-bg: rgba(59, 130, 246, 0.12);
+            --orange: #f97316;
+            --orange-bg: rgba(249, 115, 22, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .lightning {
+            color: var(--yellow);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+        }
+
+        .status-dot.connected {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .stat-card {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-card .sub {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+
+        .card h2 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            text-align: left;
+            padding: 8px 12px;
+            font-weight: 500;
+            color: var(--text-dim);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: var(--accent-glow);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-pending { background: var(--yellow-bg); color: var(--yellow); }
+        .badge-assigned,
+        .badge-inprogress,
+        .badge-verifying { background: var(--blue-bg); color: var(--blue); }
+        .badge-completed { background: var(--green-bg); color: var(--green); }
+        .badge-failed { background: var(--red-bg); color: var(--red); }
+        .badge-disputed { background: var(--orange-bg); color: var(--orange); }
+        .badge-active { background: var(--green-bg); color: var(--green); }
+        .badge-suspended { background: var(--yellow-bg); color: var(--yellow); }
+        .badge-banned { background: var(--red-bg); color: var(--red); }
+        .badge-held { background: var(--blue-bg); color: var(--blue); }
+        .badge-settled { background: var(--green-bg); color: var(--green); }
+        .badge-cancelled { background: var(--red-bg); color: var(--red); }
+        .badge-expired { background: var(--yellow-bg); color: var(--yellow); }
+
+        .score-bar {
+            width: 60px;
+            height: 6px;
+            background: var(--surface2);
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        .score-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        .sats {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .refresh-time {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-align: right;
+            margin-top: 8px;
+        }
+
+        .event-log {
+            max-height: 220px;
+            overflow-y: auto;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+        }
+
+        .event-log .event-item {
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+
+        .event-log .event-time {
+            color: var(--text-dim);
+            white-space: nowrap;
+            min-width: 70px;
+        }
+
+        .event-log .event-type {
+            color: var(--accent);
+            font-weight: 600;
+            min-width: 140px;
+        }
+
+        .event-log .event-detail {
+            color: var(--text);
+        }
+
+        .timeline-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 100px;
+            padding-top: 10px;
+        }
+
+        .timeline-bar {
+            flex: 1;
+            min-width: 4px;
+            background: var(--accent);
+            border-radius: 2px 2px 0 0;
+            transition: height 0.3s ease;
+            position: relative;
+        }
+
+        .timeline-bar:hover {
+            background: #818cf8;
+        }
+
+        .timeline-bar .tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        .timeline-bar:hover .tooltip {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><span class="lightning">&#9889;</span> Lightning Agent Dashboard</h1>
+        <div class="connection-status">
+            <div class="status-dot" id="connectionDot"></div>
+            <span id="connectionText">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Summary Cards -->
+        <div class="grid" id="summaryGrid">
+            <div class="card stat-card">
+                <span class="label">Total Tasks</span>
+                <span class="value" id="totalTasks">--</span>
+            </div>
+            <div class="card stat-card">
+                <span class="label">In Progress</span>
+                <span class="value" id="inProgressTasks" style="color: var(--blue)">--</span>
+            </div>
+            <div class="card stat-card">
+                <span class="label">Completed</span>
+                <span class="value" id="completedTasks" style="color: var(--green)">--</span>
+            </div>
+            <div class="card stat-card">
+                <span class="label">Failed</span>
+                <span class="value" id="failedTasks" style="color: var(--red)">--</span>
+            </div>
+            <div class="card stat-card">
+                <span class="label">Escrow Held</span>
+                <span class="value sats" id="escrowHeld">--</span>
+                <span class="sub">sats locked</span>
+            </div>
+            <div class="card stat-card">
+                <span class="label">Total Spent</span>
+                <span class="value sats" id="totalSpent">--</span>
+                <span class="sub">sats</span>
+            </div>
+        </div>
+
+        <!-- Timeline Chart -->
+        <div class="card" style="margin-bottom: 24px;">
+            <h2>Task Activity (30 days)</h2>
+            <div class="timeline-chart" id="timelineChart">
+                <div class="empty-state">Loading timeline...</div>
+            </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="two-col">
+            <!-- Recent Tasks -->
+            <div class="card">
+                <h2>Recent Tasks</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Payout</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasksTableBody">
+                            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Agents -->
+            <div class="card">
+                <h2>Agents</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Reputation</th>
+                                <th>Tasks</th>
+                                <th>Earned</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agentsTableBody">
+                            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Event Log -->
+        <div class="card" style="margin-top: 0;">
+            <h2>Live Events</h2>
+            <div class="event-log" id="eventLog">
+                <div class="empty-state">Waiting for events...</div>
+            </div>
+        </div>
+
+        <div class="refresh-time">Last refreshed: <span id="lastRefresh">--</span></div>
+    </div>
+
+    <script>
+        // ── Configuration ──────────────────────────────────────────────
+        const API_BASE = window.location.origin;
+        const REFRESH_INTERVAL = 15000; // 15 seconds
+
+        // ── Helpers ────────────────────────────────────────────────────
+        function formatSats(sats) {
+            if (sats === null || sats === undefined) return '0';
+            return Number(sats).toLocaleString();
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '--';
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '--';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+
+        function statusBadge(status) {
+            const cls = 'badge-' + (status || '').toLowerCase();
+            return '<span class="badge ' + cls + '">' + (status || 'Unknown') + '</span>';
+        }
+
+        function scoreBar(score) {
+            const pct = Math.round(score * 100);
+            let color = 'var(--green)';
+            if (score < 0.3) color = 'var(--red)';
+            else if (score < 0.6) color = 'var(--yellow)';
+            return '<span class="score-bar"><span class="fill" style="width:' + pct + '%;background:' + color + '"></span></span>' + score.toFixed(2);
+        }
+
+        function getApiHeaders() {
+            const headers = { 'Accept': 'application/json' };
+            // Check if an API key has been set in localStorage
+            const apiKey = localStorage.getItem('dashboard_api_key');
+            if (apiKey) {
+                headers['X-Api-Key'] = apiKey;
+            }
+            return headers;
+        }
+
+        async function apiFetch(path) {
+            try {
+                const resp = await fetch(API_BASE + path, { headers: getApiHeaders() });
+                if (!resp.ok) return null;
+                return await resp.json();
+            } catch (e) {
+                console.warn('API fetch failed:', path, e);
+                return null;
+            }
+        }
+
+        // ── Data Loading ───────────────────────────────────────────────
+        async function loadSummary() {
+            const data = await apiFetch('/api/analytics/summary');
+            if (!data) return;
+
+            document.getElementById('totalTasks').textContent = data.totalTasks ?? 0;
+            document.getElementById('inProgressTasks').textContent = data.inProgressTasks ?? 0;
+            document.getElementById('completedTasks').textContent = data.completedTasks ?? 0;
+            document.getElementById('failedTasks').textContent = data.failedTasks ?? 0;
+            document.getElementById('escrowHeld').textContent = formatSats(data.heldEscrowSats);
+            document.getElementById('totalSpent').textContent = formatSats(data.totalSatsSpent);
+        }
+
+        async function loadTasks() {
+            const data = await apiFetch('/api/tasks?page=1&pageSize=10');
+            if (!data || !data.items) return;
+
+            const tbody = document.getElementById('tasksTableBody');
+            if (data.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No tasks found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.items.map(function(t) {
+                return '<tr>' +
+                    '<td>#' + t.id + '</td>' +
+                    '<td>' + escapeHtml(t.title || '') + '</td>' +
+                    '<td>' + statusBadge(t.status) + '</td>' +
+                    '<td class="sats">' + formatSats(t.maxPayoutSats) + '</td>' +
+                    '<td>' + formatDate(t.createdAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        async function loadAgents() {
+            const data = await apiFetch('/api/analytics/agents');
+            if (!data) return;
+
+            const tbody = document.getElementById('agentsTableBody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(function(a) {
+                return '<tr>' +
+                    '<td>' + escapeHtml(a.agentName || '') + '</td>' +
+                    '<td>' + statusBadge(a.status) + '</td>' +
+                    '<td>' + scoreBar(a.reputationScore || 0) + '</td>' +
+                    '<td>' + (a.tasksCompleted || 0) + ' / ' + (a.totalTasks || 0) + '</td>' +
+                    '<td class="sats">' + formatSats(a.totalEarnedSats) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        async function loadTimeline() {
+            const data = await apiFetch('/api/analytics/timeline?days=30');
+            if (!data || data.length === 0) {
+                document.getElementById('timelineChart').innerHTML = '<div class="empty-state">No data available</div>';
+                return;
+            }
+
+            const maxVal = Math.max(1, ...data.map(function(d) { return d.created + d.completed; }));
+            const chart = document.getElementById('timelineChart');
+            chart.innerHTML = data.map(function(d) {
+                const h = Math.max(2, ((d.created + d.completed) / maxVal) * 90);
+                return '<div class="timeline-bar" style="height:' + h + 'px">' +
+                    '<div class="tooltip">' + d.date + '<br>Created: ' + d.created + '<br>Completed: ' + d.completed + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ── Event Log ──────────────────────────────────────────────────
+        const MAX_EVENTS = 50;
+        let events = [];
+
+        function addEvent(type, detail) {
+            const now = new Date();
+            events.unshift({ time: now, type: type, detail: detail });
+            if (events.length > MAX_EVENTS) events.pop();
+            renderEvents();
+        }
+
+        function renderEvents() {
+            const log = document.getElementById('eventLog');
+            if (events.length === 0) {
+                log.innerHTML = '<div class="empty-state">Waiting for events...</div>';
+                return;
+            }
+            log.innerHTML = events.map(function(e) {
+                return '<div class="event-item">' +
+                    '<span class="event-time">' + formatTime(e.time) + '</span>' +
+                    '<span class="event-type">' + escapeHtml(e.type) + '</span>' +
+                    '<span class="event-detail">' + escapeHtml(e.detail) + '</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        // ── SignalR Connection ─────────────────────────────────────────
+        let connection = null;
+
+        function setConnectionStatus(connected) {
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('connectionText');
+            if (connected) {
+                dot.className = 'status-dot connected';
+                text.textContent = 'Connected';
+            } else {
+                dot.className = 'status-dot';
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        async function initSignalR() {
+            // SignalR JS client is bundled with ASP.NET - load it dynamically
+            if (typeof signalR === 'undefined') {
+                // Try loading the SignalR client from the standard CDN-free path
+                try {
+                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js');
+                } catch (e) {
+                    console.warn('Could not load SignalR client library. Real-time updates disabled.');
+                    setConnectionStatus(false);
+                    document.getElementById('connectionText').textContent = 'SignalR unavailable';
+                    return;
+                }
+            }
+
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(API_BASE + '/hubs/agent-notifications')
+                .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+                .build();
+
+            // Register event handlers
+            connection.on('TaskAssigned', function(evt) {
+                addEvent('TaskAssigned', 'Task #' + evt.taskId + ' assigned to Agent #' + evt.agentId);
+                refreshAll();
+            });
+
+            connection.on('MilestoneVerified', function(evt) {
+                const status = evt.passed ? 'PASSED' : 'FAILED';
+                addEvent('MilestoneVerified', 'Milestone #' + evt.milestoneId + ' ' + status + ' (score: ' + (evt.score || 0).toFixed(3) + ')');
+                refreshAll();
+            });
+
+            connection.on('PaymentSent', function(evt) {
+                addEvent('PaymentSent', 'Payment #' + evt.paymentId + ' - ' + formatSats(evt.amountSats) + ' sats to Agent #' + evt.agentId);
+                refreshAll();
+            });
+
+            connection.on('DisputeOpened', function(evt) {
+                addEvent('DisputeOpened', 'Dispute #' + evt.disputeId + ' on Task #' + evt.taskId);
+                refreshAll();
+            });
+
+            connection.on('EscrowSettled', function(evt) {
+                addEvent('EscrowSettled', 'Escrow #' + evt.escrowId + ' - ' + formatSats(evt.amountSats) + ' sats settled');
+                refreshAll();
+            });
+
+            connection.on('VerificationFailed', function(evt) {
+                addEvent('VerificationFailed', 'Milestone #' + evt.milestoneId + ' on Task #' + evt.taskId + ': ' + (evt.reason || ''));
+                refreshAll();
+            });
+
+            connection.on('AgentRegistered', function(evt) {
+                addEvent('AgentRegistered', 'Agent #' + evt.agentId + ' "' + (evt.name || '') + '" registered');
+                refreshAll();
+            });
+
+            connection.onreconnecting(function() {
+                setConnectionStatus(false);
+                document.getElementById('connectionText').textContent = 'Reconnecting...';
+            });
+
+            connection.onreconnected(function() {
+                setConnectionStatus(true);
+            });
+
+            connection.onclose(function() {
+                setConnectionStatus(false);
+            });
+
+            try {
+                await connection.start();
+                setConnectionStatus(true);
+            } catch (err) {
+                console.error('SignalR connection failed:', err);
+                setConnectionStatus(false);
+            }
+        }
+
+        function loadScript(src) {
+            return new Promise(function(resolve, reject) {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // ── Refresh Loop ───────────────────────────────────────────────
+        async function refreshAll() {
+            await Promise.all([loadSummary(), loadTasks(), loadAgents()]);
+            document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
+        }
+
+        async function init() {
+            await refreshAll();
+            await loadTimeline();
+            initSignalR();
+
+            // Periodic refresh
+            setInterval(refreshAll, REFRESH_INTERVAL);
+            // Timeline refreshes less often
+            setInterval(loadTimeline, 60000);
+        }
+
+        // Remove the invalid script tag src above (it was a placeholder)
+        init();
+    </script>
+</body>
+</html>

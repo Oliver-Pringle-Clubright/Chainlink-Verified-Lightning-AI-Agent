@@ -12,4 +12,16 @@ internal class SendPaymentRequest
 
     [JsonPropertyName("fee_limit_sat")]
     public string FeeLimitSat { get; set; } = "100";
+
+    [JsonPropertyName("amt")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Amt { get; set; }
+
+    [JsonPropertyName("allow_self_payment")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AllowSelfPayment { get; set; }
+
+    [JsonPropertyName("max_parts")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaxParts { get; set; }
 }

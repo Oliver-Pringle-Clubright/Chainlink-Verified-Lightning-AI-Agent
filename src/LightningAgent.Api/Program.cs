@@ -1,3 +1,4 @@
+using System.Text;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -10,14 +11,20 @@ using LightningAgent.Verification;
 using LightningAgent.Acp;
 using LightningAgent.Engine;
 using LightningAgent.Engine.BackgroundJobs;
+using LightningAgent.Engine.Queue;
+using LightningAgent.Engine.Services;
 using LightningAgent.Engine.Workflows;
 using LightningAgent.AI.Judge;
 using LightningAgent.AI.Orchestrator;
 using LightningAgent.AI.Fraud;
+using LightningAgent.Api.Authentication;
 using LightningAgent.Api.Hubs;
 using LightningAgent.Api.Middleware;
+using LightningAgent.Api.HealthChecks;
 using LightningAgent.Api.Services;
 using LightningAgent.Data.Migrations;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -43,6 +50,7 @@ builder.Services.AddScoped<IPriceCacheRepository, PriceCacheRepository>();
 builder.Services.AddScoped<ISpendLimitRepository, SpendLimitRepository>();
 builder.Services.AddScoped<IVerificationRepository, VerificationRepository>();
 builder.Services.AddScoped<IVerificationStrategyConfigRepository, VerificationStrategyConfigRepository>();
+builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 
 // ── Configuration sections ──────────────────────────────────────────
 builder.Services.Configure<LightningSettings>(builder.Configuration.GetSection("Lightning"));
@@ -54,6 +62,8 @@ builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pr
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));
 
 // ── Lightning Network ─────────────────────────────────────────────
 builder.Services.AddLightningServices(builder.Configuration);
@@ -69,6 +79,39 @@ builder.Services.AddAcpServices(builder.Configuration);
 
 // ── Verification Pipeline ─────────────────────────────────────────
 builder.Services.AddVerificationServices();
+
+// ── JWT Authentication ───────────────────────────────────────────
+builder.Services.AddSingleton<JwtTokenService>();
+
+var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
+if (!string.IsNullOrWhiteSpace(jwtSettings.Secret))
+{
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+}
+else
+{
+    builder.Services.AddAuthentication();
+}
+
+builder.Services.AddAuthorization();
 
 // ── Webhook Delivery ─────────────────────────────────────────
 builder.Services.AddHttpClient<WebhookDeliveryService>();
@@ -96,6 +139,18 @@ builder.Services.AddHostedService<SpendLimitResetter>();
 builder.Services.AddHostedService<ChainlinkResponsePoller>();
 builder.Services.AddHostedService<VrfAuditSampler>();
 builder.Services.AddHostedService<PriceFeedRefresher>();
+builder.Services.AddHostedService<EscrowRetryService>();
+builder.Services.AddHostedService<InvoiceStatusPoller>();
+builder.Services.AddHostedService<SecretRotationService>();
+
+// ── Task Queue (background orchestration) ────────────────────────────
+builder.Services.AddSingleton<ITaskQueue, TaskQueue>();
+builder.Services.AddHostedService<TaskQueueProcessor>();
+
+// ── Health Checks ───────────────────────────────────────────────────
+builder.Services.AddHttpClient();
+builder.Services.AddHealthChecks()
+    .AddCheck<ClaudeApiHealthCheck>("claude-api");
 
 // ── MVC + SignalR + Swagger ─────────────────────────────────────────
 builder.Services.AddControllers();
@@ -174,11 +229,25 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ── HTTPS / HSTS ────────────────────────────────────────────────────
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+app.UseHttpsRedirection();
+
+// ── Static files (wwwroot for dashboard) ─────────────────────────────
+app.UseStaticFiles();
+
 // ── Middleware pipeline ─────────────────────────────────────────────
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 app.UseMiddleware<RateLimitingMiddleware>();
+app.UseMiddleware<AuditLoggingMiddleware>();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
