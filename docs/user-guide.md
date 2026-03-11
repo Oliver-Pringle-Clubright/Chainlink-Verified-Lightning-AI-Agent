@@ -1097,7 +1097,11 @@ curl -X POST http://localhost:5000/api/agents/1/suspend
 
 The system supports JWT (JSON Web Token) authentication as an alternative to API key headers. JWT tokens are useful for browser-based clients (like the dashboard) and for scenarios where you want to avoid sending the API key with every request.
 
-### 12.1 Obtaining a Token
+### 12.1 Prerequisites
+
+JWT authentication requires the `Jwt:Secret` configuration value to be set (at least 32 characters). If not configured, the auth endpoints will return `400 Bad Request` with the message: *"JWT authentication is not configured. Set Jwt:Secret in appsettings or user secrets."*
+
+### 12.2 Obtaining a Token
 
 Exchange your API key for a JWT token:
 
@@ -1117,7 +1121,7 @@ Response:
 }
 ```
 
-### 12.2 Using the Token
+### 12.3 Using the Token
 
 Include the JWT token in the `Authorization` header:
 
@@ -1126,7 +1130,7 @@ curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   http://localhost:5000/api/tasks
 ```
 
-### 12.3 Refreshing a Token
+### 12.4 Refreshing a Token
 
 Before the token expires, refresh it for a new one:
 
@@ -1136,7 +1140,7 @@ curl -X POST http://localhost:5000/api/auth/refresh \
   -d '{ "token": "eyJhbGciOiJIUzI1NiIs..." }'
 ```
 
-### 12.4 Token Claims
+### 12.5 Token Claims
 
 JWT tokens contain the following claims:
 - `sub` / `agentId`: The agent's numeric ID (0 for admin)
@@ -1145,7 +1149,7 @@ JWT tokens contain the following claims:
 - Role `Agent`: Always present
 - Role `Admin`: Present only when authenticated with the global admin API key
 
-### 12.5 Configuration
+### 12.6 Configuration
 
 JWT authentication requires the `Jwt:Secret` configuration value to be set. See [Configuration 4.9](#49-jwt-authentication).
 

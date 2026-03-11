@@ -455,10 +455,10 @@ The `ExceptionHandlingMiddleware` catches unhandled exceptions at the API bounda
 
 The system supports JWT (JSON Web Token) authentication as an alternative to API key authentication. The `AuthController` provides two endpoints:
 
-- **`POST /api/auth/token`**: Exchange an API key (global admin or per-agent) for a JWT token containing claims for `agentId`, `externalId`, `name`, and roles (`Agent`, optionally `Admin`).
-- **`POST /api/auth/refresh`**: Exchange a still-valid JWT for a new one with a fresh expiry.
+- **`POST /api/auth/token`**: Exchange an API key (global admin or per-agent) for a JWT token containing claims for `agentId`, `externalId`, `name`, and roles (`Agent`, optionally `Admin`). Returns `400 Bad Request` if JWT is not configured (i.e. `Jwt:Secret` is empty).
+- **`POST /api/auth/refresh`**: Exchange a still-valid JWT for a new one with a fresh expiry. Returns `400 Bad Request` if JWT is not configured, or `401 Unauthorized` if the token is invalid or expired.
 
-JWT configuration is managed through `JwtSettings` (secret, issuer, audience, expiry minutes). When `Jwt:Secret` is configured, ASP.NET JWT Bearer authentication is registered in the middleware pipeline. Tokens are signed with HMAC-SHA256 and validated with a 1-minute clock skew tolerance.
+JWT configuration is managed through `JwtSettings` (secret, issuer, audience, expiry minutes). When `Jwt:Secret` is configured, ASP.NET JWT Bearer authentication is registered in the middleware pipeline. Tokens are signed with HMAC-SHA256 and validated with a 1-minute clock skew tolerance. Both endpoints gracefully handle the unconfigured case rather than returning server errors.
 
 ### Audit Log Enrichment
 

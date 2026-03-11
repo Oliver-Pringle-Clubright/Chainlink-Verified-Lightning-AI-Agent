@@ -989,7 +989,7 @@ Validates the task exists and is in `Pending` or `Assigned` status, then enqueue
 
 #### `POST /api/auth/token` -- Get JWT Token
 
-Exchanges an API key (global admin or per-agent) for a JWT bearer token.
+Exchanges an API key (global admin or per-agent) for a JWT bearer token. Requires `Jwt:Secret` to be configured; returns `400 Bad Request` with an explanatory message if JWT is not set up.
 
 **Request Body:**
 ```json
@@ -1014,13 +1014,13 @@ Exchanges an API key (global admin or per-agent) for a JWT bearer token.
 - `name`: Agent name
 - Roles: `Agent` (always), `Admin` (when authenticated with global admin key)
 
-**Status Codes:** `200 OK`, `400 Bad Request`, `401 Unauthorized`
+**Status Codes:** `200 OK`, `400 Bad Request` (missing API key or JWT not configured), `401 Unauthorized` (invalid API key)
 
 ---
 
 #### `POST /api/auth/refresh` -- Refresh JWT Token
 
-Exchanges a still-valid JWT token for a new one with a fresh expiry.
+Exchanges a still-valid JWT token for a new one with a fresh expiry. Requires `Jwt:Secret` to be configured; returns `400 Bad Request` if JWT is not set up.
 
 **Request Body:**
 ```json
@@ -1031,7 +1031,7 @@ Exchanges a still-valid JWT token for a new one with a fresh expiry.
 
 **Response:** Same as `TokenResponse` above.
 
-**Status Codes:** `200 OK`, `400 Bad Request`, `401 Unauthorized`
+**Status Codes:** `200 OK`, `400 Bad Request` (missing token or JWT not configured), `401 Unauthorized` (invalid/expired token)
 
 ---
 

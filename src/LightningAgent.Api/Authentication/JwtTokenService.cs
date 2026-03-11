@@ -50,11 +50,14 @@ public class JwtTokenService
 
     public ClaimsPrincipal? ValidateToken(string token)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
-        var tokenHandler = new JwtSecurityTokenHandler();
-
         try
         {
+            if (string.IsNullOrEmpty(_settings.Secret))
+                return null;
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
+            var tokenHandler = new JwtSecurityTokenHandler();
+
             var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
             {
                 ValidateIssuerSigningKey = true,

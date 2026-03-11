@@ -35,6 +35,10 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.ApiKey))
             return BadRequest("ApiKey is required.");
 
+        var jwtSecret = _configuration["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(jwtSecret))
+            return BadRequest("JWT authentication is not configured. Set Jwt:Secret in appsettings or user secrets.");
+
         var configuredKey = _configuration["ApiSecurity:ApiKey"];
 
         // Check if this is the global admin API key
@@ -89,6 +93,10 @@ public class AuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.Token))
             return BadRequest("Token is required.");
+
+        var jwtSecret = _configuration["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(jwtSecret))
+            return BadRequest("JWT authentication is not configured. Set Jwt:Secret in appsettings or user secrets.");
 
         var principal = _jwtTokenService.ValidateToken(request.Token);
         if (principal is null)
