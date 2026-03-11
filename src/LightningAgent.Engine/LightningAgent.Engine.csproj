@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LightningAgent.Core\LightningAgent.Core.csproj" />
     <ProjectReference Include="..\LightningAgent.Data\LightningAgent.Data.csproj" />
     <ProjectReference Include="..\LightningAgent.Lightning\LightningAgent.Lightning.csproj" />

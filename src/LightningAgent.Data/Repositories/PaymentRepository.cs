@@ -102,6 +102,85 @@ public class PaymentRepository : IPaymentRepository
         return results;
     }
 
+    public async Task<int> GetFilteredCountAsync(int? taskId = null, int? agentId = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        var where = BuildWhereClause(cmd, taskId, agentId, cursor: null);
+        cmd.CommandText = $"SELECT COUNT(*) FROM Payments{where}";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<Payment>> GetFilteredPagedAsync(
+        int offset,
+        int limit,
+        int? taskId = null,
+        int? agentId = null,
+        int? cursor = null,
+        CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        var where = BuildWhereClause(cmd, taskId, agentId, cursor);
+
+        if (cursor.HasValue)
+        {
+            // Keyset pagination: no OFFSET needed, cursor condition is in WHERE
+            cmd.CommandText = $"SELECT {SelectColumns} FROM Payments{where} ORDER BY Id DESC LIMIT @Limit";
+        }
+        else
+        {
+            // Classic offset pagination
+            cmd.CommandText = $"SELECT {SelectColumns} FROM Payments{where} ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+            cmd.Parameters.AddWithValue("@Offset", offset);
+        }
+
+        cmd.Parameters.AddWithValue("@Limit", limit);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<Payment>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapPayment(reader));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Builds a WHERE clause string and adds corresponding parameters to the command.
+    /// Returns a string like " WHERE cond1 AND cond2" or empty string if no conditions.
+    /// </summary>
+    private static string BuildWhereClause(SqliteCommand cmd, int? taskId, int? agentId, int? cursor)
+    {
+        var conditions = new List<string>();
+
+        if (taskId.HasValue)
+        {
+            conditions.Add("TaskId = @TaskId");
+            cmd.Parameters.AddWithValue("@TaskId", taskId.Value);
+        }
+
+        if (agentId.HasValue)
+        {
+            conditions.Add("AgentId = @AgentId");
+            cmd.Parameters.AddWithValue("@AgentId", agentId.Value);
+        }
+
+        if (cursor.HasValue)
+        {
+            conditions.Add("Id < @Cursor");
+            cmd.Parameters.AddWithValue("@Cursor", cursor.Value);
+        }
+
+        return conditions.Count > 0
+            ? " WHERE " + string.Join(" AND ", conditions)
+            : "";
+    }
+
     public async Task<long> GetTotalSatsAsync(CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

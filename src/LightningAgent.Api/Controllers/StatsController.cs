@@ -5,8 +5,12 @@ using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Provides a comprehensive system statistics dashboard.
+/// </summary>
 [ApiController]
 [Route("api/stats")]
+[Produces("application/json")]
 public class StatsController : ControllerBase
 {
     private readonly ITaskRepository _taskRepository;
@@ -35,7 +39,12 @@ public class StatsController : ControllerBase
         _priceCacheRepository = priceCacheRepository;
     }
 
+    /// <summary>
+    /// Get aggregated system statistics including agents, tasks, payments, escrows, verifications, disputes, and pricing.
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetStats(CancellationToken ct)
     {
         // Agents

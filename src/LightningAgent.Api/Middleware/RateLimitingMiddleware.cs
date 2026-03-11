@@ -8,6 +8,7 @@ public class RateLimitingMiddleware
     private readonly ILogger<RateLimitingMiddleware> _logger;
 
     private const int DefaultMaxRequestsPerMinute = 60;
+    private const int AuthMaxRequestsPerMinute = 10;
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
 
@@ -37,11 +38,22 @@ public class RateLimitingMiddleware
             return;
         }
 
-        // Determine rate limit key and limit: use per-agent if authenticated, otherwise IP
+        // Check if this is an auth endpoint (always use IP-based rate limiting with a stricter limit)
+        bool isAuthPath = path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase);
+
+        // Determine rate limit key and limit
         string rateLimitKey;
         int limit;
 
-        if (context.Items.TryGetValue("AuthenticatedAgentId", out var agentIdObj) && agentIdObj is int agentId)
+        if (isAuthPath)
+        {
+            // Auth endpoints: always IP-based with aggressive limit.
+            // Use a separate key prefix to keep auth and regular buckets independent.
+            var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            rateLimitKey = $"auth-ip-{ip}";
+            limit = AuthMaxRequestsPerMinute;
+        }
+        else if (context.Items.TryGetValue("AuthenticatedAgentId", out var agentIdObj) && agentIdObj is int agentId)
         {
             rateLimitKey = $"agent-{agentId}";
             limit = context.Items.TryGetValue("AuthenticatedAgentRateLimit", out var rlObj) && rlObj is int rl

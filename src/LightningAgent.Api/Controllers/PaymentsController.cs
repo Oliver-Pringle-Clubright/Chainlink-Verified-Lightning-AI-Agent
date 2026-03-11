@@ -5,8 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Provides read access to payment records.
+/// </summary>
 [ApiController]
 [Route("api/payments")]
+[Produces("application/json")]
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentRepository _paymentRepository;
@@ -20,56 +24,51 @@ public class PaymentsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// List payments with optional task/agent filters and cursor-based pagination.
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(PaginatedResponse<Payment>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<PaginatedResponse<Payment>>> ListPayments(
         [FromQuery] int? taskId,
         [FromQuery] int? agentId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] int? cursor = null,
         CancellationToken ct = default)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 1;
         if (pageSize > 100) pageSize = 100;
 
-        // When filtered by taskId or agentId, use in-memory pagination
-        if (taskId.HasValue)
-        {
-            var taskPayments = await _paymentRepository.GetByTaskIdAsync(taskId.Value, ct);
-            var total = taskPayments.Count;
-            var items = taskPayments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            return Ok(new PaginatedResponse<Payment>
-            {
-                Items = items, Page = page, PageSize = pageSize, TotalCount = total
-            });
-        }
-
-        if (agentId.HasValue)
-        {
-            var agentPayments = await _paymentRepository.GetByAgentIdAsync(agentId.Value, ct);
-            var total = agentPayments.Count;
-            var items = agentPayments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            return Ok(new PaginatedResponse<Payment>
-            {
-                Items = items, Page = page, PageSize = pageSize, TotalCount = total
-            });
-        }
-
-        // No filter: return all payments, paginated
         var offset = (page - 1) * pageSize;
-        var totalCount = await _paymentRepository.GetCountAsync(ct);
-        var payments = await _paymentRepository.GetPagedAsync(offset, pageSize, ct);
+        var totalCount = await _paymentRepository.GetFilteredCountAsync(taskId, agentId, ct);
+        var payments = await _paymentRepository.GetFilteredPagedAsync(offset, pageSize, taskId, agentId, cursor, ct);
+        var items = payments.ToList();
+
+        // Compute the next cursor: the Id of the last item in this page (results are ORDER BY Id DESC)
+        int? nextCursor = items.Count == pageSize && items.Count > 0
+            ? items[^1].Id
+            : null;
 
         return Ok(new PaginatedResponse<Payment>
         {
-            Items = payments.ToList(),
+            Items = items,
             Page = page,
             PageSize = pageSize,
-            TotalCount = totalCount
+            TotalCount = totalCount,
+            NextCursor = nextCursor
         });
     }
 
+    /// <summary>
+    /// Get a single payment by ID.
+    /// </summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Payment>> GetPayment(int id, CancellationToken ct)
     {
         var payment = await _paymentRepository.GetByIdAsync(id, ct);

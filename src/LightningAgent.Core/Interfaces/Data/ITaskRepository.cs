@@ -13,6 +13,28 @@ public interface ITaskRepository
     Task<IReadOnlyList<TaskItem>> GetCompletedSinceAsync(DateTime since, CancellationToken ct = default);
     Task<int> GetCountAsync(TaskStatus? status = null, CancellationToken ct = default);
     Task<IReadOnlyList<TaskItem>> GetPagedAsync(int offset, int limit, TaskStatus? status = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the count of tasks matching the optional filters.
+    /// All filter parameters are combined with AND.
+    /// </summary>
+    Task<int> GetFilteredCountAsync(TaskStatus? status = null, int? agentId = null, string? clientId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns a page of tasks matching the optional filters.
+    /// Supports both offset and keyset (cursor-based) pagination.
+    /// When <paramref name="cursor"/> is provided, keyset pagination is used (WHERE Id &lt; @cursor ORDER BY Id DESC);
+    /// otherwise classic OFFSET/LIMIT is used.
+    /// </summary>
+    Task<IReadOnlyList<TaskItem>> GetFilteredPagedAsync(
+        int offset,
+        int limit,
+        TaskStatus? status = null,
+        int? agentId = null,
+        string? clientId = null,
+        int? cursor = null,
+        CancellationToken ct = default);
+
     Task<int> CreateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, TaskStatus status, CancellationToken ct = default);

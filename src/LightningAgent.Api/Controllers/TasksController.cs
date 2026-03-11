@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.DTOs;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Configuration;
@@ -14,8 +15,12 @@ using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Manages task creation, assignment, orchestration, and lifecycle.
+/// </summary>
 [ApiController]
 [Route("api/tasks")]
+[Produces("application/json")]
 public class TasksController : ControllerBase
 {
     private readonly ITaskRepository _taskRepository;
@@ -26,6 +31,7 @@ public class TasksController : ControllerBase
     private readonly ISpendLimitService _spendLimitService;
     private readonly ITaskQueue _taskQueue;
     private readonly TaskLifecycleWorkflow _workflow;
+    private readonly IMetricsCollector _metrics;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
@@ -37,6 +43,7 @@ public class TasksController : ControllerBase
         ISpendLimitService spendLimitService,
         ITaskQueue taskQueue,
         TaskLifecycleWorkflow workflow,
+        IMetricsCollector metrics,
         ILogger<TasksController> logger)
     {
         _taskRepository = taskRepository;
@@ -47,10 +54,18 @@ public class TasksController : ControllerBase
         _spendLimitService = spendLimitService;
         _taskQueue = taskQueue;
         _workflow = workflow;
+        _metrics = metrics;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Create a new task, optionally parsing a natural language description.
+    /// </summary>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateTaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CreateTaskResponse>> CreateTask(
         [FromBody] CreateTaskRequest request,
         CancellationToken ct)
@@ -116,6 +131,7 @@ public class TasksController : ControllerBase
         }
 
         _logger.LogInformation("Created task {TaskId} (ext: {ExternalId})", id, externalId);
+        _metrics.IncrementTasksCreated();
 
         return Ok(new CreateTaskResponse
         {
@@ -126,32 +142,24 @@ public class TasksController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// List tasks with optional filters and cursor-based pagination.
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(PaginatedResponse<TaskDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<PaginatedResponse<TaskDetailResponse>>> ListTasks(
         [FromQuery] string? status,
         [FromQuery] int? agentId,
         [FromQuery] string? clientId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] int? cursor = null,
         CancellationToken ct = default)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 1;
         if (pageSize > 100) pageSize = 100;
-
-        // When agentId or clientId filters are specified, fall back to in-memory pagination
-        if (agentId.HasValue)
-        {
-            var agentTasks = await _taskRepository.GetByAssignedAgentAsync(agentId.Value, ct);
-            if (!string.IsNullOrEmpty(clientId))
-                agentTasks = agentTasks.Where(t => t.ClientId == clientId).ToList();
-            var total = agentTasks.Count;
-            var items = agentTasks.Skip((page - 1) * pageSize).Take(pageSize).Select(MapToDetailResponse).ToList();
-            return Ok(new PaginatedResponse<TaskDetailResponse>
-            {
-                Items = items, Page = page, PageSize = pageSize, TotalCount = total
-            });
-        }
 
         TaskStatus? statusFilter = null;
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<TaskStatus>(status, ignoreCase: true, out var parsedStatus))
@@ -160,27 +168,32 @@ public class TasksController : ControllerBase
         }
 
         var offset = (page - 1) * pageSize;
-        var totalCount = await _taskRepository.GetCountAsync(statusFilter, ct);
-        var tasks = await _taskRepository.GetPagedAsync(offset, pageSize, statusFilter, ct);
+        var totalCount = await _taskRepository.GetFilteredCountAsync(statusFilter, agentId, clientId, ct);
+        var tasks = await _taskRepository.GetFilteredPagedAsync(offset, pageSize, statusFilter, agentId, clientId, cursor, ct);
+        var items = tasks.Select(MapToDetailResponse).ToList();
 
-        // If clientId filter is specified, apply it in memory (reduces count accuracy but keeps simplicity)
-        IEnumerable<TaskItem> filtered = tasks;
-        if (!string.IsNullOrEmpty(clientId))
-        {
-            filtered = tasks.Where(t => t.ClientId == clientId);
-        }
+        // Compute the next cursor: the Id of the last item in this page (results are ORDER BY Id DESC)
+        int? nextCursor = items.Count == pageSize && items.Count > 0
+            ? items[^1].Id
+            : null;
 
-        var result = filtered.Select(MapToDetailResponse).ToList();
         return Ok(new PaginatedResponse<TaskDetailResponse>
         {
-            Items = result,
+            Items = items,
             Page = page,
             PageSize = pageSize,
-            TotalCount = totalCount
+            TotalCount = totalCount,
+            NextCursor = nextCursor
         });
     }
 
+    /// <summary>
+    /// Get a single task by ID, including its milestones.
+    /// </summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(TaskDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TaskDetailResponse>> GetTask(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -204,7 +217,15 @@ public class TasksController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Assign an agent to a task. Admin only.
+    /// </summary>
     [HttpPost("{id:int}/assign")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> AssignAgent(
         int id,
         [FromBody] AssignAgentBody body,
@@ -236,7 +257,13 @@ public class TasksController : ControllerBase
         return Ok(new { message = $"Task {id} assigned to agent {body.AgentId}." });
     }
 
+    /// <summary>
+    /// Cancel a task by setting its status to Failed.
+    /// </summary>
     [HttpPost("{id:int}/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> CancelTask(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -250,7 +277,12 @@ public class TasksController : ControllerBase
         return Ok(new { message = $"Task {id} cancelled." });
     }
 
+    /// <summary>
+    /// Get all subtasks for a parent task.
+    /// </summary>
     [HttpGet("{id:int}/subtasks")]
+    [ProducesResponseType(typeof(List<TaskDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<TaskDetailResponse>>> GetSubtasks(int id, CancellationToken ct)
     {
         var subtasks = await _taskRepository.GetSubtasksAsync(id, ct);
@@ -258,7 +290,13 @@ public class TasksController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Start orchestration for a task (decomposition, agent matching, milestone creation).
+    /// </summary>
     [HttpPost("{id:int}/orchestrate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> OrchestrateTask(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -278,7 +316,13 @@ public class TasksController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Assemble and return the final deliverable for a completed task.
+    /// </summary>
     [HttpGet("{id:int}/deliverable")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetDeliverable(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -293,7 +337,13 @@ public class TasksController : ControllerBase
         return Content(deliverable, "text/plain");
     }
 
+    /// <summary>
+    /// Retry all failed milestones for a task and its subtasks.
+    /// </summary>
     [HttpPost("{id:int}/retry")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> RetryFailedSubtasks(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -345,7 +395,14 @@ public class TasksController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Enqueue a task for background orchestration.
+    /// </summary>
     [HttpPost("{id:int}/enqueue")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> EnqueueTask(int id, CancellationToken ct)
     {
         var task = await _taskRepository.GetByIdAsync(id, ct);
@@ -385,5 +442,6 @@ public class TasksController : ControllerBase
 
 public class AssignAgentBody
 {
+    [Range(1, int.MaxValue, ErrorMessage = "AgentId must be a positive integer.")]
     public int AgentId { get; set; }
 }

@@ -84,6 +84,8 @@ public class DatabaseInitializer
             @"CREATE INDEX IF NOT EXISTS IX_Tasks_Status ON Tasks(Status)",
             @"CREATE INDEX IF NOT EXISTS IX_Tasks_AssignedAgentId ON Tasks(AssignedAgentId)",
             @"CREATE INDEX IF NOT EXISTS IX_Tasks_ParentTaskId ON Tasks(ParentTaskId)",
+            @"CREATE INDEX IF NOT EXISTS IX_Tasks_Status_ClientId ON Tasks(Status, ClientId)",
+            @"CREATE INDEX IF NOT EXISTS IX_Tasks_Status_AssignedAgentId ON Tasks(Status, AssignedAgentId)",
 
             // Milestones
             @"CREATE TABLE IF NOT EXISTS Milestones (
@@ -120,6 +122,7 @@ public class DatabaseInitializer
             )",
             @"CREATE INDEX IF NOT EXISTS IX_Escrows_PaymentHash ON Escrows(PaymentHash)",
             @"CREATE INDEX IF NOT EXISTS IX_Escrows_Status ON Escrows(Status)",
+            @"CREATE INDEX IF NOT EXISTS IX_Escrows_MilestoneId_Status ON Escrows(MilestoneId, Status)",
 
             // Payments
             @"CREATE TABLE IF NOT EXISTS Payments (
@@ -136,6 +139,8 @@ public class DatabaseInitializer
                 CreatedAt TEXT NOT NULL,
                 SettledAt TEXT
             )",
+            @"CREATE INDEX IF NOT EXISTS IX_Payments_TaskId_Status ON Payments(TaskId, Status)",
+            @"CREATE INDEX IF NOT EXISTS IX_Payments_AgentId_Status ON Payments(AgentId, Status)",
 
             // Verifications
             @"CREATE TABLE IF NOT EXISTS Verifications (
@@ -153,6 +158,7 @@ public class DatabaseInitializer
                 CompletedAt TEXT
             )",
             @"CREATE INDEX IF NOT EXISTS IX_Verifications_MilestoneId ON Verifications(MilestoneId)",
+            @"CREATE INDEX IF NOT EXISTS IX_Verifications_TaskId_MilestoneId ON Verifications(TaskId, MilestoneId)",
 
             // Disputes
             @"CREATE TABLE IF NOT EXISTS Disputes (
@@ -196,6 +202,7 @@ public class DatabaseInitializer
             @"CREATE INDEX IF NOT EXISTS IX_AuditLog_EventType ON AuditLog(EventType)",
             @"CREATE INDEX IF NOT EXISTS IX_AuditLog_EntityType_EntityId ON AuditLog(EntityType, EntityId)",
             @"CREATE INDEX IF NOT EXISTS IX_AuditLog_AgentId ON AuditLog(AgentId)",
+            @"CREATE INDEX IF NOT EXISTS IX_AuditLog_CreatedAt ON AuditLog(CreatedAt)",
 
             // SpendLimits
             @"CREATE TABLE IF NOT EXISTS SpendLimits (

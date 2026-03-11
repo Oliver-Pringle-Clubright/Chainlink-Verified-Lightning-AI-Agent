@@ -11,8 +11,12 @@ using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Manages agent registration, capabilities, reputation, and lifecycle.
+/// </summary>
 [ApiController]
 [Route("api/agents")]
+[Produces("application/json")]
 public class AgentsController : ControllerBase
 {
     private readonly IAgentRepository _agentRepository;
@@ -20,6 +24,7 @@ public class AgentsController : ControllerBase
     private readonly IAgentReputationRepository _reputationRepository;
     private readonly ITaskRepository _taskRepository;
     private readonly IEventPublisher _eventPublisher;
+    private readonly ICachedDataService _cachedData;
     private readonly ILogger<AgentsController> _logger;
 
     public AgentsController(
@@ -28,6 +33,7 @@ public class AgentsController : ControllerBase
         IAgentReputationRepository reputationRepository,
         ITaskRepository taskRepository,
         IEventPublisher eventPublisher,
+        ICachedDataService cachedData,
         ILogger<AgentsController> logger)
     {
         _agentRepository = agentRepository;
@@ -35,10 +41,18 @@ public class AgentsController : ControllerBase
         _reputationRepository = reputationRepository;
         _taskRepository = taskRepository;
         _eventPublisher = eventPublisher;
+        _cachedData = cachedData;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Register a new agent with optional capabilities.
+    /// </summary>
     [HttpPost("register")]
+    [ProducesResponseType(typeof(RegisterAgentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<RegisterAgentResponse>> RegisterAgent(
         [FromBody] RegisterAgentRequest request,
         CancellationToken ct)
@@ -143,7 +157,12 @@ public class AgentsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// List agents with optional status filter and pagination.
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(PaginatedResponse<AgentDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<PaginatedResponse<AgentDetailResponse>>> ListAgents(
         [FromQuery] string? status,
         [FromQuery] int page = 1,
@@ -182,13 +201,20 @@ public class AgentsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get a single agent by ID, including reputation and capabilities (cached).
+    /// </summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(AgentDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AgentDetailResponse>> GetAgent(int id, CancellationToken ct)
     {
         if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
             return Forbid();
 
-        var agent = await _agentRepository.GetByIdAsync(id, ct);
+        var agent = await _cachedData.GetAgentAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");
 
@@ -201,8 +227,8 @@ public class AgentsController : ControllerBase
             Status = agent.Status.ToString()
         };
 
-        // Load reputation
-        var reputation = await _reputationRepository.GetByAgentIdAsync(id, ct);
+        // Load reputation (cached)
+        var reputation = await _cachedData.GetAgentReputationAsync(id, ct);
         if (reputation is not null)
         {
             response.Reputation = new ReputationDto
@@ -215,8 +241,8 @@ public class AgentsController : ControllerBase
             };
         }
 
-        // Load capabilities
-        var capabilities = await _capabilityRepository.GetByAgentIdAsync(id, ct);
+        // Load capabilities (cached)
+        var capabilities = await _cachedData.GetAgentCapabilitiesAsync(id, ct);
         response.Capabilities = capabilities.Select(c => new AgentCapabilityDto
         {
             SkillType = c.SkillType.ToString(),
@@ -228,7 +254,14 @@ public class AgentsController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Replace all capabilities for an agent.
+    /// </summary>
     [HttpPut("{id:int}/capabilities")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateCapabilities(
         int id,
         [FromBody] List<AgentCapabilityDto> capabilities,
@@ -263,15 +296,24 @@ public class AgentsController : ControllerBase
             await _capabilityRepository.CreateAsync(capability, ct);
         }
 
+        // Invalidate cached data for this agent
+        _cachedData.InvalidateAgent(id);
+
         _logger.LogInformation("Updated capabilities for agent {AgentId}", id);
 
         return Ok(new { message = $"Capabilities updated for agent {id}." });
     }
 
+    /// <summary>
+    /// Get the reputation record for an agent (cached).
+    /// </summary>
     [HttpGet("{id:int}/reputation")]
+    [ProducesResponseType(typeof(ReputationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ReputationDto>> GetReputation(int id, CancellationToken ct)
     {
-        var reputation = await _reputationRepository.GetByAgentIdAsync(id, ct);
+        var reputation = await _cachedData.GetAgentReputationAsync(id, ct);
         if (reputation is null)
             return NotFound($"Reputation for agent {id} not found.");
 
@@ -285,13 +327,20 @@ public class AgentsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// List active (assigned or in-progress) tasks for an agent.
+    /// </summary>
     [HttpGet("{id:int}/assigned-tasks")]
+    [ProducesResponseType(typeof(List<TaskDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<TaskDetailResponse>>> GetAssignedTasks(int id, CancellationToken ct)
     {
         if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
             return Forbid();
 
-        var agent = await _agentRepository.GetByIdAsync(id, ct);
+        var agent = await _cachedData.GetAgentAsync(id, ct);
         if (agent is null)
             return NotFound($"Agent {id} not found.");
 
@@ -319,7 +368,14 @@ public class AgentsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Suspend an agent. Admin only.
+    /// </summary>
     [HttpPost("{id:int}/suspend")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SuspendAgent(int id, CancellationToken ct)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
@@ -330,6 +386,9 @@ public class AgentsController : ControllerBase
             return NotFound($"Agent {id} not found.");
 
         await _agentRepository.UpdateStatusAsync(id, AgentStatus.Suspended, ct);
+
+        // Invalidate cached data for this agent
+        _cachedData.InvalidateAgent(id);
 
         _logger.LogInformation("Agent {AgentId} suspended", id);
 

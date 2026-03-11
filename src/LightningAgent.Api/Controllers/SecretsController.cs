@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Configuration;
 using Microsoft.AspNetCore.Mvc;
@@ -5,8 +6,12 @@ using Microsoft.Extensions.Options;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Admin-only endpoints for rotating API keys and checking key validity.
+/// </summary>
 [ApiController]
 [Route("api/secrets")]
+[Produces("application/json")]
 public class SecretsController : ControllerBase
 {
     private readonly IConfiguration _configuration;
@@ -33,6 +38,10 @@ public class SecretsController : ControllerBase
     /// Rotate the Claude API key. Admin only.
     /// </summary>
     [HttpPost("rotate/claude")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult RotateClaudeKey([FromBody] RotateKeyRequest request)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
@@ -53,6 +62,10 @@ public class SecretsController : ControllerBase
     /// Rotate the OpenRouter API key. Admin only.
     /// </summary>
     [HttpPost("rotate/openrouter")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult RotateOpenRouterKey([FromBody] RotateKeyRequest request)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
@@ -74,6 +87,9 @@ public class SecretsController : ControllerBase
     /// Never returns the actual key values.
     /// </summary>
     [HttpGet("status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetKeyStatus(CancellationToken ct)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
@@ -187,5 +203,7 @@ public class SecretsController : ControllerBase
 
 public class RotateKeyRequest
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(500, MinimumLength = 1)]
     public string NewKey { get; set; } = "";
 }

@@ -5,8 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Provides BTC/USD pricing and task cost estimation.
+/// </summary>
 [ApiController]
 [Route("api/pricing")]
+[Produces("application/json")]
 public class PricingController : ControllerBase
 {
     private readonly IPriceCacheRepository _priceCacheRepository;
@@ -20,7 +24,12 @@ public class PricingController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Get the latest cached BTC/USD price.
+    /// </summary>
     [HttpGet("btcusd")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetBtcUsdPrice(CancellationToken ct)
     {
         var latest = await _priceCacheRepository.GetLatestAsync("BTC/USD", ct);
@@ -47,7 +56,13 @@ public class PricingController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Estimate the cost of a task in sats and USD based on type and complexity.
+    /// </summary>
     [HttpPost("estimate")]
+    [ProducesResponseType(typeof(PriceEstimateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<PriceEstimateResponse>> EstimateTaskCost(
         [FromBody] PriceEstimateRequest request,
         CancellationToken ct)

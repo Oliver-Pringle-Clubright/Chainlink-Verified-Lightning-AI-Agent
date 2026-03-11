@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
@@ -6,8 +7,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Manages dispute creation and resolution.
+/// </summary>
 [ApiController]
 [Route("api/disputes")]
+[Produces("application/json")]
 public class DisputesController : ControllerBase
 {
     private readonly IDisputeRepository _disputeRepository;
@@ -21,7 +26,13 @@ public class DisputesController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Open a new dispute for a task or milestone.
+    /// </summary>
     [HttpPost]
+    [ProducesResponseType(typeof(Dispute), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Dispute>> OpenDispute(
         [FromBody] OpenDisputeRequest request,
         CancellationToken ct)
@@ -54,7 +65,13 @@ public class DisputesController : ControllerBase
         return Ok(dispute);
     }
 
+    /// <summary>
+    /// Get a single dispute by ID.
+    /// </summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(Dispute), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Dispute>> GetDispute(int id, CancellationToken ct)
     {
         var dispute = await _disputeRepository.GetByIdAsync(id, ct);
@@ -64,7 +81,14 @@ public class DisputesController : ControllerBase
         return Ok(dispute);
     }
 
+    /// <summary>
+    /// Resolve an open dispute with a resolution message.
+    /// </summary>
     [HttpPost("{id:int}/resolve")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ResolveDispute(
         int id,
         [FromBody] ResolveDisputeBody body,
@@ -91,5 +115,7 @@ public class DisputesController : ControllerBase
 
 public class ResolveDisputeBody
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(5000, MinimumLength = 1)]
     public string Resolution { get; set; } = string.Empty;
 }

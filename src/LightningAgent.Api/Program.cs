@@ -21,6 +21,7 @@ using LightningAgent.Api.Authentication;
 using LightningAgent.Api.Hubs;
 using LightningAgent.Api.Middleware;
 using LightningAgent.Api.HealthChecks;
+using LightningAgent.Api.Lifetime;
 using LightningAgent.Api.Services;
 using LightningAgent.Data.Migrations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -147,10 +148,20 @@ builder.Services.AddHostedService<SecretRotationService>();
 builder.Services.AddSingleton<ITaskQueue, TaskQueue>();
 builder.Services.AddHostedService<TaskQueueProcessor>();
 
+// ── Metrics (singleton) ──────────────────────────────────────────────
+builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
+
+// ── Graceful Shutdown ────────────────────────────────────────────────
+builder.Services.AddHostedService<GracefulShutdownService>();
+
 // ── Health Checks ───────────────────────────────────────────────────
 builder.Services.AddHttpClient();
 builder.Services.AddHealthChecks()
     .AddCheck<ClaudeApiHealthCheck>("claude-api");
+
+// ── In-Memory Cache ─────────────────────────────────────────────────
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ICachedDataService, CachedDataService>();
 
 // ── MVC + SignalR + Swagger ─────────────────────────────────────────
 builder.Services.AddControllers();

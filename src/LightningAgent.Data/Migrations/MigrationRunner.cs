@@ -96,5 +96,15 @@ public class MigrationRunner
             ALTER TABLE AuditLog ADD COLUMN UserAgent TEXT;
             CREATE INDEX IF NOT EXISTS IX_AuditLog_AgentId ON AuditLog(AgentId);
         ");
+
+        yield return ("1.4.0", "Add composite indexes for common multi-column query patterns", @"
+            CREATE INDEX IF NOT EXISTS IX_Tasks_Status_ClientId ON Tasks(Status, ClientId);
+            CREATE INDEX IF NOT EXISTS IX_Tasks_Status_AssignedAgentId ON Tasks(Status, AssignedAgentId);
+            CREATE INDEX IF NOT EXISTS IX_Payments_TaskId_Status ON Payments(TaskId, Status);
+            CREATE INDEX IF NOT EXISTS IX_Payments_AgentId_Status ON Payments(AgentId, Status);
+            CREATE INDEX IF NOT EXISTS IX_Escrows_MilestoneId_Status ON Escrows(MilestoneId, Status);
+            CREATE INDEX IF NOT EXISTS IX_Verifications_TaskId_MilestoneId ON Verifications(TaskId, MilestoneId);
+            CREATE INDEX IF NOT EXISTS IX_AuditLog_CreatedAt ON AuditLog(CreatedAt);
+        ");
     }
 }

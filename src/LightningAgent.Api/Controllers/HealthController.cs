@@ -4,8 +4,12 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Health check endpoints for liveness and detailed diagnostics.
+/// </summary>
 [ApiController]
 [Route("api/health")]
+[Produces("application/json")]
 public class HealthController : ControllerBase
 {
     private readonly SqliteConnectionFactory _connectionFactory;
@@ -19,7 +23,12 @@ public class HealthController : ControllerBase
         _healthCheckService = healthCheckService;
     }
 
+    /// <summary>
+    /// Basic health check returning service status and database connectivity.
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult GetHealth()
     {
         string dbStatus;
@@ -41,7 +50,13 @@ public class HealthController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Detailed health check running all registered health checks and returning individual results.
+    /// </summary>
     [HttpGet("detailed")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetDetailedHealth(CancellationToken ct)
     {
         var report = await _healthCheckService.CheckHealthAsync(ct);

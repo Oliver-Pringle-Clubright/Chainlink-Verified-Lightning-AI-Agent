@@ -4,8 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Provides system analytics: summary, per-agent stats, and timeline data.
+/// </summary>
 [ApiController]
 [Route("api/analytics")]
+[Produces("application/json")]
 public class AnalyticsController : ControllerBase
 {
     private readonly IAnalyticsRepository _analyticsRepository;
@@ -23,6 +27,8 @@ public class AnalyticsController : ControllerBase
     /// Task counts by status, average completion time, total sats spent.
     /// </summary>
     [HttpGet("summary")]
+    [ProducesResponseType(typeof(SystemSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<SystemSummary>> GetSummary(CancellationToken ct)
     {
         _logger.LogDebug("Fetching analytics summary");
@@ -34,6 +40,8 @@ public class AnalyticsController : ControllerBase
     /// Per-agent statistics: tasks completed, avg score, total earned.
     /// </summary>
     [HttpGet("agents")]
+    [ProducesResponseType(typeof(IReadOnlyList<AgentStats>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<AgentStats>>> GetAgentStats(CancellationToken ct)
     {
         _logger.LogDebug("Fetching agent analytics");
@@ -45,6 +53,8 @@ public class AnalyticsController : ControllerBase
     /// Daily task counts for the specified number of days (default 30).
     /// </summary>
     [HttpGet("timeline")]
+    [ProducesResponseType(typeof(IReadOnlyList<TimelineEntry>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<TimelineEntry>>> GetTimeline(
         [FromQuery] int days = 30,
         CancellationToken ct = default)

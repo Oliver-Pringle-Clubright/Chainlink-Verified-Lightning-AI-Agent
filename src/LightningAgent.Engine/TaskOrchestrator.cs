@@ -22,6 +22,7 @@ public class TaskOrchestrator : ITaskOrchestrator
     private readonly ITaskRepository _taskRepo;
     private readonly IMilestoneRepository _milestoneRepo;
     private readonly IVerificationRepository _verificationRepo;
+    private readonly IMetricsCollector _metrics;
     private readonly ILogger<TaskOrchestrator> _logger;
 
     public TaskOrchestrator(
@@ -37,6 +38,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         ITaskRepository taskRepo,
         IMilestoneRepository milestoneRepo,
         IVerificationRepository verificationRepo,
+        IMetricsCollector metrics,
         ILogger<TaskOrchestrator> logger)
     {
         _decompositionEngine = decompositionEngine;
@@ -51,6 +53,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         _taskRepo = taskRepo;
         _milestoneRepo = milestoneRepo;
         _verificationRepo = verificationRepo;
+        _metrics = metrics;
         _logger = logger;
     }
 

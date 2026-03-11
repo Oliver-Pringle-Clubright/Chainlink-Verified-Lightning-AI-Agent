@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
@@ -11,8 +12,12 @@ using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Agent Communication Protocol (ACP) endpoints for service discovery, task posting, negotiation, and completion.
+/// </summary>
 [ApiController]
 [Route("api/acp")]
+[Produces("application/json")]
 public class AcpController : ControllerBase
 {
     private readonly ITaskOrchestrator _taskOrchestrator;
@@ -48,6 +53,8 @@ public class AcpController : ControllerBase
     /// ACP Service Discovery: lists available agent services, optionally filtered by task type.
     /// </summary>
     [HttpGet("services")]
+    [ProducesResponseType(typeof(List<AcpServiceDescriptor>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<AcpServiceDescriptor>>> GetServices(
         [FromQuery] string? taskType,
         CancellationToken ct)
@@ -117,6 +124,9 @@ public class AcpController : ControllerBase
     /// ACP-compatible task posting: accepts an AcpTaskSpec and creates a TaskItem.
     /// </summary>
     [HttpPost("tasks")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> PostTask(
         [FromBody] AcpTaskSpec spec,
         [FromQuery] bool orchestrate = false,
@@ -188,6 +198,8 @@ public class AcpController : ControllerBase
     /// ACP price negotiation: simple midpoint-based negotiation.
     /// </summary>
     [HttpPost("negotiate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public ActionResult Negotiate([FromBody] NegotiateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.TaskId))
@@ -217,6 +229,10 @@ public class AcpController : ControllerBase
     /// ACP completion notification: marks a task as completed.
     /// </summary>
     [HttpPost("complete")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> Complete(
         [FromBody] CompleteRequest request,
         CancellationToken ct)
@@ -249,13 +265,23 @@ public class AcpController : ControllerBase
 
 public class NegotiateRequest
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(100, MinimumLength = 1)]
     public string TaskId { get; set; } = string.Empty;
+
+    [Range(1, long.MaxValue, ErrorMessage = "RequesterBudgetSats must be greater than zero.")]
     public long RequesterBudgetSats { get; set; }
+
+    [Range(1, long.MaxValue, ErrorMessage = "WorkerAskingSats must be greater than zero.")]
     public long WorkerAskingSats { get; set; }
 }
 
 public class CompleteRequest
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(100, MinimumLength = 1)]
     public string TaskId { get; set; } = string.Empty;
+
+    [StringLength(10000)]
     public string? Result { get; set; }
 }

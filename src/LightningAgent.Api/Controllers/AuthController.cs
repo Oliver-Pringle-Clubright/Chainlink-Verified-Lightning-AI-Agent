@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.Authentication;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Interfaces.Data;
@@ -5,8 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Handles JWT token issuance and refresh for agent and admin authentication.
+/// </summary>
 [ApiController]
 [Route("api/auth")]
+[Produces("application/json")]
 public class AuthController : ControllerBase
 {
     private readonly JwtTokenService _jwtTokenService;
@@ -30,6 +35,10 @@ public class AuthController : ControllerBase
     /// Exchange an API key for a JWT token.
     /// </summary>
     [HttpPost("token")]
+    [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetToken([FromBody] TokenRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.ApiKey))
@@ -89,6 +98,10 @@ public class AuthController : ControllerBase
     /// Refresh a JWT token. The existing token must still be valid.
     /// </summary>
     [HttpPost("refresh")]
+    [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult RefreshToken([FromBody] RefreshRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
@@ -135,11 +148,15 @@ public class AuthController : ControllerBase
 
 public class TokenRequest
 {
+    [Required(AllowEmptyStrings = false)]
+    [StringLength(200, MinimumLength = 1)]
     public string ApiKey { get; set; } = "";
 }
 
 public class RefreshRequest
 {
+    [Required(AllowEmptyStrings = false)]
+    [MinLength(1)]
     public string Token { get; set; } = "";
 }
 

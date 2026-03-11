@@ -9,8 +9,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
+/// <summary>
+/// Manages milestone retrieval, output submission, and verification.
+/// </summary>
 [ApiController]
 [Route("api/milestones")]
+[Produces("application/json")]
 public class MilestonesController : ControllerBase
 {
     private readonly IMilestoneRepository _milestoneRepository;
@@ -36,7 +40,12 @@ public class MilestonesController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Get all milestones for a given task.
+    /// </summary>
     [HttpGet("by-task/{taskId:int}")]
+    [ProducesResponseType(typeof(List<MilestoneDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<MilestoneDto>>> GetMilestonesByTask(int taskId, CancellationToken ct)
     {
         var milestones = await _milestoneRepository.GetByTaskIdAsync(taskId, ct);
@@ -55,7 +64,13 @@ public class MilestonesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Get a single milestone by ID.
+    /// </summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(MilestoneDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<MilestoneDto>> GetMilestone(int id, CancellationToken ct)
     {
         var milestone = await _milestoneRepository.GetByIdAsync(id, ct);
@@ -74,7 +89,13 @@ public class MilestonesController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get the decoded output data for a milestone.
+    /// </summary>
     [HttpGet("{id:int}/output")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetMilestoneOutput(int id, CancellationToken ct)
     {
         var milestone = await _milestoneRepository.GetByIdAsync(id, ct);
@@ -88,7 +109,15 @@ public class MilestonesController : ControllerBase
         return Content(decoded, "text/plain");
     }
 
+    /// <summary>
+    /// Submit output for a milestone and trigger verification.
+    /// </summary>
     [HttpPost("{id:int}/submit")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SubmitOutput(
         int id,
         [FromBody] SubmitMilestoneOutputRequest request,
