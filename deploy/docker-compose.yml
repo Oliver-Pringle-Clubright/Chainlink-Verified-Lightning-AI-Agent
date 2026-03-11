@@ -1,0 +1,70 @@
+name: lightningagent
+
+services:
+  lightningagent-api:
+    container_name: lightningagent-api
+    build:
+      context: ..
+      dockerfile: src/LightningAgent.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__Sqlite=Data Source=/app/data/lightningagent.db;Cache=Shared
+      - ClaudeAi__ApiKey=${CLAUDE_API_KEY}
+      - Chainlink__Testnet__EthereumRpcUrl=${ETH_RPC_URL:-}
+      - Lightning__Testnet__LndRestUrl=https://lnd:8080
+      - Network__IsTest=${IS_TESTNET:-true}
+      - ApiSecurity__ApiKey=${API_KEY:-}
+      - ApiSecurity__DevMode=false
+    volumes:
+      - agent-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      - lnd
+    restart: unless-stopped
+
+  lnd:
+    container_name: lightningagent-lnd
+    image: lightninglabs/lnd:v0.18.0-beta
+    volumes:
+      - lnd-data:/root/.lnd
+    environment:
+      - LND_CHAIN=bitcoin
+      - LND_BACKEND=neutrino
+    command: >
+      lnd
+      --bitcoin.active
+      --bitcoin.testnet
+      --bitcoin.node=neutrino
+      --neutrino.connect=faucet.lightning.community
+      --rpclisten=0.0.0.0:10009
+      --restlisten=0.0.0.0:8080
+      --tlsextradomain=lnd
+    restart: unless-stopped
+
+  acp-runtime:
+    container_name: lightningagent-acp
+    build:
+      context: ../../
+      dockerfile: Chainlink-Verified-Lightning AI-Agent/deploy/Dockerfile.acp-runtime
+    depends_on:
+      lightningagent-api:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - LIGHTNING_AGENT_API_URL=http://lightningagent-api:8080
+      - LITE_AGENT_API_KEY=${LITE_AGENT_API_KEY}
+    volumes:
+      - ./acp-config.json:/app/config.json:ro
+    restart: unless-stopped
+
+volumes:
+  agent-data:
+  lnd-data:

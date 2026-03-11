@@ -1,0 +1,16 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Copy package files and install dependencies
+COPY virtuals-protocol-acp/package.json virtuals-protocol-acp/package-lock.json* ./
+RUN npm install
+
+# Copy ACP source code
+COPY virtuals-protocol-acp/src ./src
+COPY virtuals-protocol-acp/bin ./bin
+
+ENV LIGHTNING_AGENT_API_URL=http://lightningagent-api:8080
+ENV NODE_ENV=production
+
+CMD ["npx", "tsx", "src/seller/runtime/seller.ts"]
