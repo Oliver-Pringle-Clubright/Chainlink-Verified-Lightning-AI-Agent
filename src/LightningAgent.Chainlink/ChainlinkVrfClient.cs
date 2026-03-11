@@ -54,7 +54,7 @@ public class ChainlinkVrfClient : IChainlinkVrfClient
         var requestFunction = contract.GetFunction("requestRandomWords");
 
         var keyHash = _settings.VrfKeyHash.HexToByteArray();
-        var subscriptionId = BigInteger.Parse(_settings.SubscriptionId);
+        var subscriptionId = BigInteger.Parse(_settings.VrfSubscriptionId);
         ushort requestConfirmations = 3;
         uint callbackGasLimit = 100_000;
 

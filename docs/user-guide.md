@@ -175,7 +175,8 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
   "EthUsdPriceFeedAddress": "",
   "LinkUsdPriceFeedAddress": "",
   "LinkEthPriceFeedAddress": "",
-  "SubscriptionId": "",
+  "VrfSubscriptionId": "",
+  "FunctionsSubscriptionId": "",
   "DonId": "",
   "PrivateKeyPath": "",
   "CcipRouterAddress": "",
@@ -195,7 +196,8 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
 | `EthUsdPriceFeedAddress` | Chainlink ETH/USD Price Feed contract address. Sepolia: `0x694AA1769357215DE4FAC081bf1f309aDC325306` |
 | `LinkUsdPriceFeedAddress` | Chainlink LINK/USD Price Feed contract address. Sepolia: `0xc59E3633BAAC79493d908e63626716e204A45EdF` |
 | `LinkEthPriceFeedAddress` | Chainlink LINK/ETH Price Feed contract address. Sepolia: `0x42585eD362B3f1BCa95c640FdFf35Ef899212734` |
-| `SubscriptionId` | Your Chainlink Functions/VRF subscription ID. |
+| `VrfSubscriptionId` | Your Chainlink VRF subscription ID from [vrf.chain.link](https://vrf.chain.link). These are large uint256 values. |
+| `FunctionsSubscriptionId` | Your Chainlink Functions subscription ID from [functions.chain.link](https://functions.chain.link). Typically a small integer. |
 | `DonId` | Your Chainlink Functions DON (Decentralized Oracle Network) identifier. |
 | `PrivateKeyPath` | Path to a file containing your Ethereum private key (hex-encoded). Used to sign transactions. **Keep this file secure.** |
 | `CcipRouterAddress` | Chainlink CCIP Router contract address for cross-chain messaging. |

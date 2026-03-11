@@ -170,7 +170,7 @@ public class TaskLifecycleWorkflow
                     {
                         Source = $"return Functions.encodeString('{proofHash}');",
                         Args = new List<string> { proofHash },
-                        SubscriptionId = _chainlinkSettings.SubscriptionId,
+                        SubscriptionId = _chainlinkSettings.FunctionsSubscriptionId,
                         DonId = _chainlinkSettings.DonId,
                         CallbackGasLimit = 300_000
                     };

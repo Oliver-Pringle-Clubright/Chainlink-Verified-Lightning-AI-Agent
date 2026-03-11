@@ -7,13 +7,14 @@ public class ChainlinkSettings
     public string AutomationRegistryAddress { get; set; } = "";
     public string VrfCoordinatorAddress { get; set; } = "";
     public string BtcUsdPriceFeedAddress { get; set; } = "";
-    public string SubscriptionId { get; set; } = "";
+    public string FunctionsSubscriptionId { get; set; } = "";
     public string DonId { get; set; } = "";
     public string PrivateKeyPath { get; set; } = "";
 
     // VRF configuration
     public string VrfKeyHash { get; set; } = "";
     public string VrfConsumerAddress { get; set; } = "";
+    public string VrfSubscriptionId { get; set; } = "";
 
     // Additional price feeds
     public string EthUsdPriceFeedAddress { get; set; } = "";

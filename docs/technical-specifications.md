@@ -1454,7 +1454,8 @@ Configuration is read from `appsettings.json` (and environment-specific override
 | `EthUsdPriceFeedAddress` | string | `""` | Chainlink ETH/USD price feed aggregator address |
 | `LinkUsdPriceFeedAddress` | string | `""` | Chainlink LINK/USD price feed aggregator address |
 | `LinkEthPriceFeedAddress` | string | `""` | Chainlink LINK/ETH price feed aggregator address |
-| `SubscriptionId` | string | `""` | Chainlink Functions/VRF subscription ID |
+| `VrfSubscriptionId` | string | `""` | Chainlink VRF subscription ID (from vrf.chain.link, large uint256) |
+| `FunctionsSubscriptionId` | string | `""` | Chainlink Functions subscription ID (from functions.chain.link, small integer) |
 | `DonId` | string | `""` | Chainlink Functions DON (Decentralized Oracle Network) ID |
 | `PrivateKeyPath` | string | `""` | Path to Ethereum private key file for signing transactions |
 | `CcipRouterAddress` | string | `""` | Chainlink CCIP Router contract address |
