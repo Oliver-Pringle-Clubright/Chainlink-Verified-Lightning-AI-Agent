@@ -91,6 +91,14 @@ builder.Services.AddSingleton<JwtTokenService>();
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 if (!string.IsNullOrWhiteSpace(jwtSettings.Secret))
 {
+    // Enforce minimum 32-byte key length for HMAC-SHA256
+    if (Encoding.UTF8.GetByteCount(jwtSettings.Secret) < 32)
+    {
+        throw new InvalidOperationException(
+            "Jwt:Secret must be at least 32 bytes long for HMAC-SHA256 security. " +
+            "Current length: " + Encoding.UTF8.GetByteCount(jwtSettings.Secret) + " bytes.");
+    }
+
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -111,8 +119,18 @@ if (!string.IsNullOrWhiteSpace(jwtSettings.Secret))
         };
     });
 }
+else if (!builder.Environment.IsDevelopment())
+{
+    // In production, JWT must be configured
+    throw new InvalidOperationException(
+        "Jwt:Secret is required in non-development environments. " +
+        "Set it via user secrets, environment variables, or appsettings.Production.json.");
+}
 else
 {
+    // Development only: warn but allow startup without JWT
+    Console.WriteLine("WARNING: Jwt:Secret is not configured. JWT authentication is disabled. " +
+        "This is only acceptable in development.");
     builder.Services.AddAuthentication();
 }
 
@@ -186,14 +204,18 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 
-// ── CORS (allow all for dev) ────────────────────────────────────────
+// ── CORS (restrictive by default) ───────────────────────────────────
 builder.Services.AddCors(options =>
 {
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        ?? ["https://localhost:5001", "http://localhost:5000"];
+
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -264,6 +286,18 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 app.UseHttpsRedirection();
+
+// ── Security Headers ────────────────────────────────────────────────
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-XSS-Protection"] = "0"; // Modern best practice: disable legacy filter, rely on CSP
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:; img-src 'self' data:;";
+    await next();
+});
 
 // ── Static files (wwwroot for dashboard) ─────────────────────────────
 app.UseStaticFiles();

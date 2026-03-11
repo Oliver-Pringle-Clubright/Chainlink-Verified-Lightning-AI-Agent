@@ -36,10 +36,32 @@ public class ApiKeyAuthMiddleware
 
         var configuredKey = _configuration["ApiSecurity:ApiKey"];
 
-        // Dev mode: if no API key is configured, allow all requests
+        // Dev mode must be explicitly enabled; empty API key alone is not enough
+        var devModeEnabled = string.Equals(
+            _configuration["ApiSecurity:DevMode"], "true", StringComparison.OrdinalIgnoreCase);
+
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
-            await _next(context);
+            if (devModeEnabled)
+            {
+                context.Items["DevMode"] = true;
+                await _next(context);
+                return;
+            }
+
+            // No API key configured and dev mode not enabled - reject all requests
+            _logger.LogError("No API key configured (ApiSecurity:ApiKey) and DevMode is not enabled. " +
+                "Set ApiSecurity:ApiKey or set ApiSecurity:DevMode=true for development.");
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.ContentType = "application/problem+json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                type = "https://tools.ietf.org/html/rfc9110#section-15.6.4",
+                title = "Service Unavailable",
+                status = 503,
+                detail = "API authentication is not configured. Contact the administrator.",
+                traceId = context.TraceIdentifier
+            });
             return;
         }
 

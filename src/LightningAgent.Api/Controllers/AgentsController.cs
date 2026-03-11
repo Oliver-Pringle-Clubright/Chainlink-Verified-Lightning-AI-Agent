@@ -147,6 +147,7 @@ public class AgentsController : ControllerBase
 
         await _reputationRepository.CreateAsync(reputation, ct);
 
+        // Log registration without the API key
         _logger.LogInformation("Registered agent {AgentId} (ext: {ExternalId})", agentId, externalId);
 
         await _eventPublisher.PublishAgentRegisteredAsync(agentId, request.Name, ct);
@@ -156,7 +157,8 @@ public class AgentsController : ControllerBase
             AgentId = agentId,
             ExternalId = externalId,
             Status = AgentStatus.Active.ToString(),
-            ApiKey = plaintextApiKey
+            ApiKey = plaintextApiKey,
+            ApiKeyWarning = "Store this API key securely. It will NOT be shown again and cannot be retrieved."
         });
     }
 
