@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
 using LightningAgent.Api.Authentication;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Interfaces.Data;
@@ -53,32 +55,45 @@ public class AuthController : ControllerBase
 
         var configuredKey = _configuration["ApiSecurity:ApiKey"];
 
-        // Check if this is the global admin API key
-        if (!string.IsNullOrWhiteSpace(configuredKey) &&
-            string.Equals(request.ApiKey, configuredKey, StringComparison.Ordinal))
+        // Check if this is the global admin API key — supports comma-separated list
+        if (!string.IsNullOrWhiteSpace(configuredKey))
         {
-            // Create a synthetic admin agent for token generation
-            var adminAgent = new LightningAgent.Core.Models.Agent
+            var configuredKeys = configuredKey.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var providedBytes = Encoding.UTF8.GetBytes(request.ApiKey);
+            bool isAdminKey = false;
+            foreach (var key in configuredKeys)
             {
-                Id = 0,
-                ExternalId = "admin",
-                Name = "Admin"
-            };
+                if (CryptographicOperations.FixedTimeEquals(providedBytes, Encoding.UTF8.GetBytes(key)))
+                {
+                    isAdminKey = true;
+                    break;
+                }
+            }
 
-            var adminToken = _jwtTokenService.GenerateToken(adminAgent, isAdmin: true);
-            _logger.LogInformation("JWT token issued for admin user");
-
-            return Ok(new TokenResponse
+            if (isAdminKey)
             {
-                Token = adminToken,
-                ExpiresIn = GetExpirySeconds(),
-                TokenType = "Bearer"
-            });
+                // Create a synthetic admin agent for token generation
+                var adminAgent = new LightningAgent.Core.Models.Agent
+                {
+                    Id = 0,
+                    ExternalId = "admin",
+                    Name = "Admin"
+                };
+
+                var adminToken = _jwtTokenService.GenerateToken(adminAgent, isAdmin: true);
+                _logger.LogInformation("JWT token issued for admin user");
+
+                return Ok(new TokenResponse
+                {
+                    Token = adminToken,
+                    ExpiresIn = GetExpirySeconds(),
+                    TokenType = "Bearer"
+                });
+            }
         }
 
-        // Check for per-agent API key
-        var hash = ApiKeyHasher.Hash(request.ApiKey);
-        var agent = await _agentRepository.GetByApiKeyHashAsync(hash, ct);
+        // Check for per-agent API key (salted hash requires checking each agent)
+        var agent = await _agentRepository.GetByApiKeyAsync(request.ApiKey, ct);
 
         if (agent is null)
         {
@@ -105,7 +120,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public IActionResult RefreshToken([FromBody] RefreshRequest request)
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
             return BadRequest("Token is required.");
@@ -119,9 +134,26 @@ public class AuthController : ControllerBase
             return Unauthorized("Invalid or expired token.");
 
         var agentIdClaim = principal.FindFirst("agentId")?.Value;
+        var isAdmin = principal.IsInRole("Admin");
+
+        // Re-validate the agent still exists and is active
+        if (int.TryParse(agentIdClaim, out var parsedId) && parsedId > 0)
+        {
+            var dbAgent = await _agentRepository.GetByIdAsync(parsedId, CancellationToken.None);
+            if (dbAgent is null)
+                return Unauthorized("Agent no longer exists.");
+            if (dbAgent.Status != LightningAgent.Core.Enums.AgentStatus.Active)
+                return Unauthorized("Agent is suspended or inactive.");
+
+            // Use DB values, not token claims (prevents privilege persistence)
+            var freshToken = _jwtTokenService.GenerateToken(dbAgent, isAdmin);
+            _logger.LogInformation("JWT token refreshed for agent {AgentId}", dbAgent.Id);
+            return Ok(new TokenResponse { Token = freshToken, ExpiresIn = GetExpirySeconds(), TokenType = "Bearer" });
+        }
+
+        // Admin token refresh (id=0)
         var externalIdClaim = principal.FindFirst("externalId")?.Value ?? "";
         var nameClaim = principal.FindFirst("name")?.Value ?? "";
-        var isAdmin = principal.IsInRole("Admin");
 
         var agent = new LightningAgent.Core.Models.Agent
         {

@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.5.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.6.0 -- comprehensive technical reference.
 
 ---
 

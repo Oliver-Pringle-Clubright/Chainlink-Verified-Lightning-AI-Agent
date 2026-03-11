@@ -103,7 +103,15 @@ public class ExportController : ControllerBase
 
         if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
         {
-            var json = JsonSerializer.Serialize(payments, JsonOptions);
+            var maskedPayments = payments.Select(p => new
+            {
+                p.Id, p.EscrowId, p.TaskId, p.MilestoneId, p.AgentId,
+                p.AmountSats, p.AmountUsd,
+                PaymentHash = MaskSensitive(p.PaymentHash),
+                p.PaymentType, p.Status, p.CreatedAt, p.SettledAt
+            }).ToList();
+
+            var json = JsonSerializer.Serialize(maskedPayments, JsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
             return File(bytes, "application/json", "payments_export.json");
         }
@@ -232,7 +240,7 @@ public class ExportController : ControllerBase
     private static string BuildPaymentsCsv(IReadOnlyList<Payment> payments)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Id,EscrowId,TaskId,MilestoneId,AgentId,AmountSats,AmountUsd,PaymentHash,PaymentType,Status,CreatedAt,SettledAt");
+        sb.AppendLine("Id,EscrowId,TaskId,MilestoneId,AgentId,AmountSats,AmountUsd,PaymentHash (masked),PaymentType,Status,CreatedAt,SettledAt");
 
         foreach (var p in payments)
         {
@@ -244,7 +252,7 @@ public class ExportController : ControllerBase
                 p.AgentId,
                 p.AmountSats,
                 p.AmountUsd?.ToString() ?? "",
-                CsvEscape(p.PaymentHash ?? ""),
+                MaskSensitive(p.PaymentHash),
                 p.PaymentType,
                 p.Status,
                 p.CreatedAt.ToString("o"),
@@ -304,6 +312,13 @@ public class ExportController : ControllerBase
         }
 
         return sb.ToString();
+    }
+
+    private static string MaskSensitive(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Length <= 8) return "****";
+        return value[..4] + "****" + value[^4..];
     }
 
     private static string CsvEscape(string value)

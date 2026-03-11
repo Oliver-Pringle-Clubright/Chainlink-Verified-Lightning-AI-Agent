@@ -14,4 +14,5 @@ public interface IAgentRepository
     Task UpdateAsync(Agent agent, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, AgentStatus status, CancellationToken ct = default);
     Task<Agent?> GetByApiKeyHashAsync(string apiKeyHash, CancellationToken ct = default);
+    Task<Agent?> GetByApiKeyAsync(string plaintextApiKey, CancellationToken ct = default);
 }

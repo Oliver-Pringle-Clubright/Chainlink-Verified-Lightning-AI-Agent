@@ -4,16 +4,13 @@ public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    private readonly IWebHostEnvironment _environment;
 
     public ExceptionHandlingMiddleware(
         RequestDelegate next,
-        ILogger<ExceptionHandlingMiddleware> logger,
-        IWebHostEnvironment environment)
+        ILogger<ExceptionHandlingMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -28,11 +25,10 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = 500;
             context.Response.ContentType = "application/problem+json";
 
-            // In development, include the full exception message for debugging.
-            // In production/staging, return a generic message to avoid leaking internal details.
-            var detail = _environment.IsDevelopment()
-                ? ex.Message
-                : "An internal error occurred. Please try again later or contact support.";
+            // Always return generic error to client - never leak exception details
+            var detail = "An internal error occurred. Please try again later.";
+            // Correlation ID helps support staff find the detailed logs
+            var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid?.ToString() : context.TraceIdentifier;
 
             var problem = new
             {
@@ -40,6 +36,7 @@ public class ExceptionHandlingMiddleware
                 title = "Internal Server Error",
                 status = 500,
                 detail,
+                correlationId,
                 traceId = context.TraceIdentifier
             };
             await context.Response.WriteAsJsonAsync(problem);

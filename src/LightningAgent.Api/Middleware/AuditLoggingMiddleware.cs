@@ -52,6 +52,7 @@ public class AuditLoggingMiddleware
             var auditRepo = context.RequestServices.GetService<IAuditLogRepository>();
             if (auditRepo is not null)
             {
+                var sanitizedPath = SanitizePath(path);
                 var entry = new AuditLogEntry
                 {
                     EventType = $"{method} {statusCode}",
@@ -59,7 +60,7 @@ public class AuditLoggingMiddleware
                     EntityId = agentId ?? 0,
                     Details = System.Text.Json.JsonSerializer.Serialize(new
                     {
-                        path,
+                        path = sanitizedPath,
                         method,
                         statusCode,
                         ipAddress,
@@ -74,8 +75,27 @@ public class AuditLoggingMiddleware
         catch (Exception ex)
         {
             // Never let audit logging failures break the request pipeline
-            _logger.LogWarning(ex, "Failed to write audit log entry for {Method} {Path}", method, path);
+            _logger.LogWarning(ex, "Failed to write audit log entry for {Method} {Path}", method, SanitizePath(path));
         }
+    }
+
+    private static string SanitizePath(string path)
+    {
+        // Remove query string to prevent logging sensitive parameters
+        var queryIndex = path.IndexOf('?');
+        if (queryIndex >= 0)
+        {
+            var basePath = path[..queryIndex];
+            var query = path[queryIndex..];
+            // Redact known sensitive params
+            query = System.Text.RegularExpressions.Regex.Replace(
+                query,
+                @"((?:api[_-]?key|token|secret|password|authorization|key)=)[^&]*",
+                "$1[REDACTED]",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return basePath + query;
+        }
+        return path;
     }
 
     private static bool ShouldSkip(string path)

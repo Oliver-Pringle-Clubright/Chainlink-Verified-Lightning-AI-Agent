@@ -1,5 +1,6 @@
 namespace LightningAgent.Api.Middleware;
 
+using System.Security.Cryptography;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Interfaces.Data;
 
@@ -72,18 +73,28 @@ public class ApiKeyAuthMiddleware
             return;
         }
 
-        // 1. Check for global API key (admin access)
-        if (string.Equals(providedKey, configuredKey, StringComparison.Ordinal))
+        // 1. Check for global API key (admin access) — supports comma-separated list
+        var configuredKeys = configuredKey.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var providedBytes = System.Text.Encoding.UTF8.GetBytes(providedKey!);
+        bool isAdminKey = false;
+        foreach (var key in configuredKeys)
+        {
+            if (CryptographicOperations.FixedTimeEquals(providedBytes, System.Text.Encoding.UTF8.GetBytes(key)))
+            {
+                isAdminKey = true;
+                break;
+            }
+        }
+        if (isAdminKey)
         {
             context.Items["IsAdmin"] = true;
             await _next(context);
             return;
         }
 
-        // 2. Check for per-agent API key
+        // 2. Check for per-agent API key (salted hash requires checking each agent)
         var agentRepo = context.RequestServices.GetRequiredService<IAgentRepository>();
-        var hash = ApiKeyHasher.Hash(providedKey!);
-        var agent = await agentRepo.GetByApiKeyHashAsync(hash);
+        var agent = await agentRepo.GetByApiKeyAsync(providedKey!, context.RequestAborted);
 
         if (agent is not null)
         {

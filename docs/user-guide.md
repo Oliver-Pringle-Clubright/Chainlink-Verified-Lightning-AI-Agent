@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.5.0**
+**Version 1.6.0**
 
 ## Table of Contents
 
@@ -26,8 +26,9 @@
 20. [Idempotency](#20-idempotency)
 21. [API Versioning](#21-api-versioning)
 22. [Stale Data Cleanup](#22-stale-data-cleanup)
-23. [Troubleshooting](#23-troubleshooting)
-24. [Docker Deployment](#24-docker-deployment)
+23. [Security Hardening](#23-security-hardening-v160)
+24. [Troubleshooting](#24-troubleshooting)
+25. [Docker Deployment](#25-docker-deployment)
 
 ---
 
@@ -1559,7 +1560,78 @@ Expired entries are deleted permanently during each cleanup cycle.
 
 ---
 
-## 23. Troubleshooting
+## 23. Security Hardening (v1.6.0)
+
+Version 1.6.0 introduces comprehensive security hardening across the entire application.
+
+### 23.1 API Key Hashing (PBKDF2)
+
+Agent API keys are now hashed with **PBKDF2-SHA256** (100,000 iterations) with a unique random salt per key. Legacy SHA256 hashes are still supported for backward compatibility but new registrations always use PBKDF2.
+
+### 23.2 Constant-Time Comparison
+
+All API key comparisons (admin and per-agent) use `CryptographicOperations.FixedTimeEquals` to prevent timing attacks.
+
+### 23.3 Multi-Admin API Keys
+
+`ApiSecurity:ApiKey` now supports a comma-separated list of admin keys:
+
+```json
+"ApiSecurity": {
+  "ApiKey": "admin-key-1,admin-key-2,admin-key-3"
+}
+```
+
+### 23.4 Token Refresh Re-validation
+
+When refreshing a JWT token, the system re-validates the agent against the database to ensure it still exists and is active. Suspended or deleted agents cannot refresh tokens.
+
+### 23.5 SSRF Protection
+
+Webhook URLs are validated before delivery. Blocked destinations include:
+- Loopback addresses (`localhost`, `127.0.0.1`, `::1`)
+- Private networks (`10.x.x.x`, `172.16-31.x.x`, `192.168.x.x`)
+- Link-local addresses (`169.254.x.x`)
+
+### 23.6 Request Size Limits
+
+A 10MB maximum request body size is enforced. Requests exceeding this limit receive a `413 Payload Too Large` response.
+
+### 23.7 Sliding Window Rate Limiting
+
+Rate limiting now uses a sliding window algorithm instead of fixed windows, preventing burst attacks at window boundaries.
+
+### 23.8 Export Data Redaction
+
+Payment exports (JSON and CSV) now mask the `PaymentHash` field, showing only the first and last 4 characters (e.g., `a1b2****x9y0`).
+
+### 23.9 Error Message Redaction
+
+Internal error details are never returned to API clients, regardless of environment. Responses include a correlation ID for support reference.
+
+### 23.10 Webhook Payload Signing
+
+A `WebhookSigner` utility computes HMAC-SHA256 signatures for webhook payloads, allowing recipients to verify authenticity.
+
+### 23.11 Audit Log Redaction
+
+Sensitive query parameters (api_key, token, secret, password) are automatically redacted in audit log entries.
+
+### 23.12 Admin Action Audit Trail
+
+Backup creation, restoration, and secret rotation operations are logged to the audit trail with IP address and user agent.
+
+### 23.13 Idempotency Key TTL
+
+Cached idempotency responses expire after 24 hours. Expired keys are treated as new requests.
+
+### 23.14 Dependency Security
+
+Newtonsoft.Json pinned to v13.0.3 to address CVE GHSA-5crp-9r3c-p9vr (previously 11.0.2 via Nethereum).
+
+---
+
+## 24. Troubleshooting
 
 ### "LND connection refused"
 
@@ -1619,7 +1691,7 @@ Expired entries are deleted permanently during each cleanup cycle.
 
 ---
 
-## 24. Docker Deployment
+## 25. Docker Deployment
 
 ### Quick Start with Docker Compose
 

@@ -303,6 +303,7 @@ app.Use(async (context, next) =>
 app.UseStaticFiles();
 
 // ── Middleware pipeline ─────────────────────────────────────────────
+app.UseMiddleware<RequestSizeLimitMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();

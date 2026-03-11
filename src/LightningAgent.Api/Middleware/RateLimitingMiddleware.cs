@@ -12,7 +12,7 @@ public class RateLimitingMiddleware
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
 
-    private static readonly ConcurrentDictionary<string, (int count, DateTime window)> Clients = new();
+    private static readonly ConcurrentDictionary<string, SlidingWindow> Clients = new();
     private static DateTime _lastCleanup = DateTime.UtcNow;
     private static readonly object CleanupLock = new();
 
@@ -69,32 +69,10 @@ public class RateLimitingMiddleware
         // Periodic cleanup of stale entries
         CleanupStaleEntries();
 
-        var now = DateTime.UtcNow;
-        var exceeded = false;
+        var window = Clients.GetOrAdd(rateLimitKey, _ => new SlidingWindow());
+        var count = window.CountInWindow(Window);
 
-        Clients.AddOrUpdate(
-            rateLimitKey,
-            // Factory: first request for this key
-            _ => (1, now),
-            // Update: check window and count
-            (_, existing) =>
-            {
-                if (now - existing.window > Window)
-                {
-                    // Window expired, start new window
-                    return (1, now);
-                }
-
-                if (existing.count >= limit)
-                {
-                    exceeded = true;
-                    return existing; // Don't increment further
-                }
-
-                return (existing.count + 1, existing.window);
-            });
-
-        if (exceeded)
+        if (count >= limit)
         {
             _logger.LogWarning(
                 "Rate limit exceeded for client {ClientKey} (limit {Limit} req/min)",
@@ -115,6 +93,8 @@ public class RateLimitingMiddleware
             return;
         }
 
+        window.Record();
+
         await _next(context);
     }
 
@@ -132,13 +112,49 @@ public class RateLimitingMiddleware
             _lastCleanup = now;
 
             var staleKeys = Clients
-                .Where(kvp => now - kvp.Value.window > Window)
+                .Where(kvp => kvp.Value.IsStale(Window))
                 .Select(kvp => kvp.Key)
                 .ToList();
 
             foreach (var key in staleKeys)
             {
                 Clients.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private class SlidingWindow
+    {
+        private readonly Queue<DateTime> _timestamps = new();
+        private readonly object _lock = new();
+
+        public int CountInWindow(TimeSpan window)
+        {
+            lock (_lock)
+            {
+                var cutoff = DateTime.UtcNow - window;
+                while (_timestamps.Count > 0 && _timestamps.Peek() < cutoff)
+                    _timestamps.Dequeue();
+                return _timestamps.Count;
+            }
+        }
+
+        public void Record()
+        {
+            lock (_lock)
+            {
+                _timestamps.Enqueue(DateTime.UtcNow);
+            }
+        }
+
+        public bool IsStale(TimeSpan window)
+        {
+            lock (_lock)
+            {
+                var cutoff = DateTime.UtcNow - window;
+                while (_timestamps.Count > 0 && _timestamps.Peek() < cutoff)
+                    _timestamps.Dequeue();
+                return _timestamps.Count == 0;
             }
         }
     }

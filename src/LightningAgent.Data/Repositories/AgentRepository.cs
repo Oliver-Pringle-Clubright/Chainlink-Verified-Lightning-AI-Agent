@@ -1,6 +1,7 @@
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
+using LightningAgent.Core.Security;
 using Microsoft.Data.Sqlite;
 
 namespace LightningAgent.Data.Repositories;
@@ -171,6 +172,24 @@ public class AgentRepository : IAgentRepository
 
         using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapAgentFull(reader) : null;
+    }
+
+    public async Task<Agent?> GetByApiKeyAsync(string plaintextApiKey, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id, ExternalId, Name, WalletPubkey, Status, DailySpendCapSats, WeeklySpendCapSats, WebhookUrl, ApiKeyHash, RateLimitPerMinute, CreatedAt, UpdatedAt FROM Agents WHERE ApiKeyHash IS NOT NULL AND ApiKeyHash != ''";
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var hash = reader.GetString(reader.GetOrdinal("ApiKeyHash"));
+            if (ApiKeyHasher.Verify(plaintextApiKey, hash))
+            {
+                return MapAgent(reader);
+            }
+        }
+        return null;
     }
 
     public async Task DeleteAsync(int id)

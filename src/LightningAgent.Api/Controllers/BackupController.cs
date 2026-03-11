@@ -1,5 +1,7 @@
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Configuration;
+using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Models;
 using LightningAgent.Data;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
@@ -21,17 +23,20 @@ public class BackupController : ControllerBase
     private readonly BackupSettings _backupSettings;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BackupController> _logger;
+    private readonly IAuditLogRepository _auditLogRepository;
 
     public BackupController(
         SqliteConnectionFactory connectionFactory,
         IOptions<BackupSettings> backupSettings,
         IConfiguration configuration,
-        ILogger<BackupController> logger)
+        ILogger<BackupController> logger,
+        IAuditLogRepository auditLogRepository)
     {
         _connectionFactory = connectionFactory;
         _backupSettings = backupSettings.Value;
         _configuration = configuration;
         _logger = logger;
+        _auditLogRepository = auditLogRepository;
     }
 
     /// <summary>
@@ -41,7 +46,7 @@ public class BackupController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public IActionResult CreateBackup()
+    public async Task<IActionResult> CreateBackup()
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
             return Forbid();
@@ -70,6 +75,18 @@ public class BackupController : ControllerBase
             _logger.LogInformation(
                 "Database backup created: {BackupPath} ({Size} bytes)",
                 backupFilePath, fileInfo.Length);
+
+            await _auditLogRepository.CreateAsync(new AuditLogEntry
+            {
+                EventType = "BackupCreated",
+                EntityType = "Database",
+                EntityId = 0,
+                Action = "CreateBackup",
+                Details = $"Backup created: {backupFileName} ({fileInfo.Length} bytes)",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = HttpContext.Request.Headers.UserAgent.ToString(),
+                CreatedAt = DateTime.UtcNow
+            });
 
             return Ok(new
             {
@@ -132,7 +149,7 @@ public class BackupController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public IActionResult RestoreBackup([FromBody] RestoreBackupRequest request)
+    public async Task<IActionResult> RestoreBackup([FromBody] RestoreBackupRequest request)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
             return Forbid();
@@ -168,6 +185,18 @@ public class BackupController : ControllerBase
             _logger.LogWarning(
                 "Database restored from backup: {BackupPath}. Application restart is required.",
                 backupFilePath);
+
+            await _auditLogRepository.CreateAsync(new AuditLogEntry
+            {
+                EventType = "BackupRestored",
+                EntityType = "Database",
+                EntityId = 0,
+                Action = "RestoreBackup",
+                Details = $"Database restored from backup: {sanitizedFileName}",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = HttpContext.Request.Headers.UserAgent.ToString(),
+                CreatedAt = DateTime.UtcNow
+            });
 
             return Ok(new
             {

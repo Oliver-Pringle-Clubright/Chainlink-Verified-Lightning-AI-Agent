@@ -55,20 +55,30 @@ public class IdempotencyMiddleware
         var existing = await idempotencyRepo.GetAsync(idempotencyKey, context.RequestAborted);
         if (existing is not null)
         {
-            _logger.LogInformation(
-                "Returning cached idempotent response for key {IdempotencyKey} (status {Status})",
-                idempotencyKey, existing.ResponseStatus);
-
-            context.Response.StatusCode = existing.ResponseStatus;
-            context.Response.ContentType = "application/json";
-            context.Response.Headers["Idempotency-Key"] = idempotencyKey;
-            context.Response.Headers["X-Idempotent-Replayed"] = "true";
-
-            if (!string.IsNullOrEmpty(existing.ResponseBody))
+            // Check TTL - ignore cached responses older than 24 hours
+            if (existing.CreatedAt < DateTime.UtcNow.AddHours(-24))
             {
-                await context.Response.WriteAsync(existing.ResponseBody, context.RequestAborted);
+                _logger.LogInformation(
+                    "Idempotency key {IdempotencyKey} has expired (created {CreatedAt}), treating as new request",
+                    idempotencyKey, existing.CreatedAt);
             }
-            return;
+            else
+            {
+                _logger.LogInformation(
+                    "Returning cached idempotent response for key {IdempotencyKey} (status {Status})",
+                    idempotencyKey, existing.ResponseStatus);
+
+                context.Response.StatusCode = existing.ResponseStatus;
+                context.Response.ContentType = "application/json";
+                context.Response.Headers["Idempotency-Key"] = idempotencyKey;
+                context.Response.Headers["X-Idempotent-Replayed"] = "true";
+
+                if (!string.IsNullOrEmpty(existing.ResponseBody))
+                {
+                    await context.Response.WriteAsync(existing.ResponseBody, context.RequestAborted);
+                }
+                return;
+            }
         }
 
         // Capture the response by replacing the body stream

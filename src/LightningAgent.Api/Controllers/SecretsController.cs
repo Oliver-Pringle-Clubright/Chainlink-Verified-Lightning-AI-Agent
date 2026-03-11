@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using LightningAgent.Api.Helpers;
 using LightningAgent.Core.Configuration;
+using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Models;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -21,6 +23,7 @@ public class SecretsController : ControllerBase
     private readonly IOptionsMonitor<ClaudeAiSettings> _claudeSettings;
     private readonly IOptionsMonitor<OpenRouterSettings> _openRouterSettings;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IAuditLogRepository _auditLogRepository;
     private readonly ILogger<SecretsController> _logger;
 
     public SecretsController(
@@ -28,12 +31,14 @@ public class SecretsController : ControllerBase
         IOptionsMonitor<ClaudeAiSettings> claudeSettings,
         IOptionsMonitor<OpenRouterSettings> openRouterSettings,
         IHttpClientFactory httpClientFactory,
+        IAuditLogRepository auditLogRepository,
         ILogger<SecretsController> logger)
     {
         _configuration = configuration;
         _claudeSettings = claudeSettings;
         _openRouterSettings = openRouterSettings;
         _httpClientFactory = httpClientFactory;
+        _auditLogRepository = auditLogRepository;
         _logger = logger;
     }
 
@@ -45,7 +50,7 @@ public class SecretsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public IActionResult RotateClaudeKey([FromBody] RotateKeyRequest request)
+    public async Task<IActionResult> RotateClaudeKey([FromBody] RotateKeyRequest request, CancellationToken ct)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
             return Forbid();
@@ -58,6 +63,18 @@ public class SecretsController : ControllerBase
 
         _logger.LogInformation("Claude API key has been rotated by admin");
 
+        await _auditLogRepository.CreateAsync(new AuditLogEntry
+        {
+            EventType = "SecretRotated",
+            EntityType = "Secret",
+            EntityId = 0,
+            Action = "RotateClaude",
+            Details = "API key rotated by admin",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString(),
+            CreatedAt = DateTime.UtcNow
+        }, ct);
+
         return Ok(new { message = "Claude API key rotated successfully. Note: for persistence, update your appsettings or user secrets." });
     }
 
@@ -69,7 +86,7 @@ public class SecretsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public IActionResult RotateOpenRouterKey([FromBody] RotateKeyRequest request)
+    public async Task<IActionResult> RotateOpenRouterKey([FromBody] RotateKeyRequest request, CancellationToken ct)
     {
         if (!AuthorizationHelper.IsAdminOrDevMode(HttpContext))
             return Forbid();
@@ -81,6 +98,18 @@ public class SecretsController : ControllerBase
         _configuration["OpenRouter:ApiKey"] = request.NewKey;
 
         _logger.LogInformation("OpenRouter API key has been rotated by admin");
+
+        await _auditLogRepository.CreateAsync(new AuditLogEntry
+        {
+            EventType = "SecretRotated",
+            EntityType = "Secret",
+            EntityId = 0,
+            Action = "RotateOpenRouter",
+            Details = "API key rotated by admin",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString(),
+            CreatedAt = DateTime.UtcNow
+        }, ct);
 
         return Ok(new { message = "OpenRouter API key rotated successfully. Note: for persistence, update your appsettings or user secrets." });
     }

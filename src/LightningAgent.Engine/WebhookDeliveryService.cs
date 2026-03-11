@@ -2,6 +2,7 @@ namespace LightningAgent.Engine;
 
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
+using LightningAgent.Core.Security;
 using Microsoft.Extensions.Logging;
 
 public class WebhookDeliveryService
@@ -34,6 +35,14 @@ public class WebhookDeliveryService
         var agent = await _agentRepo.GetByIdAsync(agentId, ct);
         if (agent == null || string.IsNullOrEmpty(agent.WebhookUrl))
             return;
+
+        // SSRF protection: validate the webhook URL before sending
+        var (isValid, error) = UrlValidator.ValidateWebhookUrl(agent.WebhookUrl);
+        if (!isValid)
+        {
+            _logger.LogWarning("Blocked webhook delivery to unsafe URL {Url}: {Error}", agent.WebhookUrl, error);
+            return;
+        }
 
         var json = System.Text.Json.JsonSerializer.Serialize(new
         {
