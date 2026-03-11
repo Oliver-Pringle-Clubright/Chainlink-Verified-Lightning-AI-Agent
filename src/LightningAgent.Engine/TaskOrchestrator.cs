@@ -1,4 +1,5 @@
 using LightningAgent.AI.Orchestrator;
+using LightningAgent.Chainlink.Services;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
@@ -18,6 +19,7 @@ public class TaskOrchestrator : ITaskOrchestrator
     private readonly IReputationService _reputationService;
     private readonly ISpendLimitService _spendLimitService;
     private readonly IEventPublisher _eventPublisher;
+    private readonly AutomationService _automation;
     private readonly DeliverableAssembler _assembler;
     private readonly ITaskRepository _taskRepo;
     private readonly IMilestoneRepository _milestoneRepo;
@@ -34,6 +36,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         IReputationService reputationService,
         ISpendLimitService spendLimitService,
         IEventPublisher eventPublisher,
+        AutomationService automation,
         DeliverableAssembler assembler,
         ITaskRepository taskRepo,
         IMilestoneRepository milestoneRepo,
@@ -49,6 +52,7 @@ public class TaskOrchestrator : ITaskOrchestrator
         _reputationService = reputationService;
         _spendLimitService = spendLimitService;
         _eventPublisher = eventPublisher;
+        _automation = automation;
         _assembler = assembler;
         _taskRepo = taskRepo;
         _milestoneRepo = milestoneRepo;
@@ -139,7 +143,24 @@ public class TaskOrchestrator : ITaskOrchestrator
                         escrow.Id, milestone.Id, milestone.PayoutSats);
                 }
 
-                // e. In production, the agent would be notified and we would await output.
+                // e. Register Chainlink Automation for task timeout monitoring (best-effort)
+                try
+                {
+                    var upkeepTx = await _automation.RegisterTaskTimeoutUpkeepAsync(
+                        subtask.ExternalId, ct);
+                    if (upkeepTx is not null)
+                    {
+                        _logger.LogInformation(
+                            "Automation timeout upkeep registered for subtask {SubtaskId} (tx={TxHash})",
+                            subtask.Id, upkeepTx);
+                    }
+                }
+                catch (Exception autoEx)
+                {
+                    _logger.LogDebug(autoEx, "Automation upkeep registration skipped for subtask {SubtaskId}", subtask.Id);
+                }
+
+                // f. In production, the agent would be notified and we would await output.
                 //    For now, mark subtask as in progress (agent execution is external).
                 subtask.Status = TaskStatus.InProgress;
                 subtask.UpdatedAt = DateTime.UtcNow;

@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.7.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.8.0 -- comprehensive technical reference.
 
 ---
 
@@ -796,12 +796,54 @@ Returns the latest cached BTC/USD price from the Chainlink price feed.
 {
   "pair": "BTC/USD",
   "priceUsd": 67500.00,
-  "source": "ChainlinkPriceFeed",
+  "source": "Chainlink",
   "fetchedAt": "2026-01-01T12:00:00Z"
 }
 ```
 
 Returns a stub with `priceUsd: 0.0` and `source: "none"` if no cached price exists.
+
+**Status Codes:** `200 OK`
+
+---
+
+#### `GET /api/pricing/{pair}` -- Get Price for Any Supported Pair
+
+Returns the latest cached price for the specified pair. The pair is normalized from various formats: `ethusd`, `ETH-USD`, `ETH/USD`, `eth_usd` all resolve to `ETH/USD`.
+
+**Supported pairs:** `BTC/USD`, `ETH/USD`, `LINK/USD`, `LINK/ETH`
+
+**Response:**
+```json
+{
+  "pair": "ETH/USD",
+  "priceUsd": 3850.00,
+  "source": "Chainlink",
+  "fetchedAt": "2026-03-11T12:00:00Z"
+}
+```
+
+If no cached price exists, attempts a live fetch from the Chainlink oracle. Returns `priceUsd: 0.0` with `source: "none"` if both cache and live fetch fail.
+
+**Status Codes:** `200 OK`, `400 Bad Request` (unknown pair)
+
+---
+
+#### `GET /api/pricing/all` -- Get All Cached Prices
+
+Returns all available cached prices at once.
+
+**Response:**
+```json
+[
+  { "pair": "BTC/USD", "priceUsd": 67500.00, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "ETH/USD", "priceUsd": 3850.00, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "LINK/USD", "priceUsd": 18.50, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "LINK/ETH", "priceUsd": 0.00480519, "source": "Chainlink", "fetchedAt": "..." }
+]
+```
+
+Only includes pairs that have been cached. Returns an empty array if no prices are cached.
 
 **Status Codes:** `200 OK`
 
@@ -1405,11 +1447,18 @@ Configuration is read from `appsettings.json` (and environment-specific override
 | `EthereumRpcUrl` | string | `""` | Ethereum JSON-RPC endpoint (Infura, Alchemy, etc.) |
 | `FunctionsRouterAddress` | string | `""` | Chainlink Functions router contract address |
 | `AutomationRegistryAddress` | string | `""` | Chainlink Automation registry contract address |
-| `VrfCoordinatorAddress` | string | `""` | Chainlink VRF Coordinator v2 contract address |
+| `VrfCoordinatorAddress` | string | `""` | Chainlink VRF Coordinator v2+ contract address |
+| `VrfKeyHash` | string | `""` | VRF key hash (gas lane) for the subscription |
+| `VrfConsumerAddress` | string | `""` | Deployed VRF consumer contract address (reads fulfilled randomness) |
 | `BtcUsdPriceFeedAddress` | string | `""` | Chainlink BTC/USD price feed aggregator address |
-| `SubscriptionId` | long | `0` | Chainlink Functions/VRF subscription ID |
+| `EthUsdPriceFeedAddress` | string | `""` | Chainlink ETH/USD price feed aggregator address |
+| `LinkUsdPriceFeedAddress` | string | `""` | Chainlink LINK/USD price feed aggregator address |
+| `LinkEthPriceFeedAddress` | string | `""` | Chainlink LINK/ETH price feed aggregator address |
+| `SubscriptionId` | string | `""` | Chainlink Functions/VRF subscription ID |
 | `DonId` | string | `""` | Chainlink Functions DON (Decentralized Oracle Network) ID |
 | `PrivateKeyPath` | string | `""` | Path to Ethereum private key file for signing transactions |
+| `CcipRouterAddress` | string | `""` | Chainlink CCIP Router contract address |
+| `CcipSourceChainSelector` | ulong | `0` | CCIP chain selector for the source chain |
 
 ### 4.4 Acp
 
@@ -1705,8 +1754,9 @@ All background services extend `BackgroundService` and run as hosted services re
 | **EscrowExpiryChecker** | `LightningAgent.Engine.BackgroundJobs.EscrowExpiryChecker` | 60 seconds | Scans for HODL invoices in `Held` status past their `ExpiresAt` timestamp and cancels them via `IEscrowManager.CheckExpiredEscrowsAsync()`. |
 | **SpendLimitResetter** | `LightningAgent.Engine.BackgroundJobs.SpendLimitResetter` | 1 hour | Resets `CurrentSpentSats` to 0 for spend limit periods that have expired (`PeriodEnd < now`) via `ISpendLimitService.ResetExpiredPeriodsAsync()`. |
 | **ChainlinkResponsePoller** | `LightningAgent.Engine.BackgroundJobs.ChainlinkResponsePoller` | 30 seconds | Queries `IVerificationRepository.GetPendingChainlinkAsync()` for verifications awaiting Chainlink Functions responses, calls `IChainlinkFunctionsClient.GetResponseAsync()`, and updates the verification with the score, pass/fail result, and transaction hash. |
-| **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF, uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Logs warnings for anomaly scores > 0.7. |
-| **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Calls `IPricingService.GetBtcUsdPriceAsync()` which fetches the latest BTC/USD price from the Chainlink price feed oracle and caches it in the `PriceCache` table. |
+| **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF via async fulfillment (consumer contract), uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Falls back to `Random.Shared` if VRF is not configured or times out (90 seconds). |
+| **VrfResponsePoller** | `LightningAgent.Engine.BackgroundJobs.VrfResponsePoller` | 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. When fulfilled, invokes the registered callback with the random words. Times out requests after 40 attempts (~10 minutes). |
+| **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Refreshes all configured price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH) from Chainlink oracles. Each pair is fetched independently with its own error handling -- a failure in one pair does not block others. |
 | **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch). |
 | **EscrowRetryService** | `LightningAgent.Engine.BackgroundJobs.EscrowRetryService` | 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on initial attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, updates escrow to `Held` with the new invoice. On failure, logs warning and retries next cycle. |
 | **InvoiceStatusPoller** | `LightningAgent.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |

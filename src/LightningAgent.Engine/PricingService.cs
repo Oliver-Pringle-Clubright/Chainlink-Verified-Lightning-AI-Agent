@@ -35,35 +35,62 @@ public class PricingService : IPricingService
         _logger = logger;
     }
 
-    public async Task<double> GetBtcUsdPriceAsync(CancellationToken ct = default)
-    {
-        const string pair = "BTC/USD";
+    public Task<double> GetBtcUsdPriceAsync(CancellationToken ct = default) =>
+        FetchPriceAsync("BTC/USD", _chainlinkSettings.BtcUsdPriceFeedAddress, ct);
 
-        // 1. Try to get a cached price from the last 5 minutes
+    public Task<double> GetEthUsdPriceAsync(CancellationToken ct = default) =>
+        FetchPriceAsync("ETH/USD", _chainlinkSettings.EthUsdPriceFeedAddress, ct);
+
+    public Task<double> GetLinkUsdPriceAsync(CancellationToken ct = default) =>
+        FetchPriceAsync("LINK/USD", _chainlinkSettings.LinkUsdPriceFeedAddress, ct);
+
+    public Task<double> GetLinkEthPriceAsync(CancellationToken ct = default) =>
+        FetchPriceAsync("LINK/ETH", _chainlinkSettings.LinkEthPriceFeedAddress, ct);
+
+    public Task<double> GetPriceAsync(string pair, CancellationToken ct = default)
+    {
+        var feedAddress = pair.ToUpperInvariant() switch
+        {
+            "BTC/USD" => _chainlinkSettings.BtcUsdPriceFeedAddress,
+            "ETH/USD" => _chainlinkSettings.EthUsdPriceFeedAddress,
+            "LINK/USD" => _chainlinkSettings.LinkUsdPriceFeedAddress,
+            "LINK/ETH" => _chainlinkSettings.LinkEthPriceFeedAddress,
+            _ => throw new ArgumentException($"Unknown price pair: {pair}. Supported: BTC/USD, ETH/USD, LINK/USD, LINK/ETH")
+        };
+
+        return FetchPriceAsync(pair.ToUpperInvariant(), feedAddress, ct);
+    }
+
+    /// <summary>
+    /// Fetches a price from the Chainlink oracle or cache for any configured pair.
+    /// </summary>
+    private async Task<double> FetchPriceAsync(string pair, string feedAddress, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(feedAddress))
+            throw new InvalidOperationException(
+                $"Price feed address for {pair} is not configured in Chainlink settings.");
+
+        // 1. Try cache
         var cached = await _priceCache.GetLatestAsync(pair, ct);
         if (cached is not null && cached.FetchedAt > DateTime.UtcNow.AddMinutes(-CacheTtlMinutes))
         {
             _logger.LogDebug(
-                "Using cached BTC/USD price: ${Price:F2} (fetched {Ago:F0}s ago)",
-                cached.PriceUsd,
-                (DateTime.UtcNow - cached.FetchedAt).TotalSeconds);
+                "Using cached {Pair} price: ${Price:F2} (fetched {Ago:F0}s ago)",
+                pair, cached.PriceUsd, (DateTime.UtcNow - cached.FetchedAt).TotalSeconds);
             return cached.PriceUsd;
         }
 
-        // 2. Fetch fresh price from Chainlink price feed
-        _logger.LogInformation("Fetching fresh BTC/USD price from Chainlink oracle");
+        // 2. Fetch from Chainlink
+        _logger.LogInformation("Fetching fresh {Pair} price from Chainlink oracle", pair);
 
-        var feedData = await _priceFeed.GetLatestPriceAsync(
-            _chainlinkSettings.BtcUsdPriceFeedAddress, ct);
-
-        // feedData.Answer is already divided by 10^decimals in the price feed client
+        var feedData = await _priceFeed.GetLatestPriceAsync(feedAddress, ct);
         double price = (double)feedData.Answer;
 
         _logger.LogInformation(
-            "Chainlink BTC/USD price: ${Price:F2} (roundId={RoundId})",
-            price, feedData.RoundId);
+            "Chainlink {Pair} price: ${Price:F8} (roundId={RoundId})",
+            pair, price, feedData.RoundId);
 
-        // 3. Cache the new price
+        // 3. Cache
         var quote = new PriceQuote
         {
             Pair = pair,

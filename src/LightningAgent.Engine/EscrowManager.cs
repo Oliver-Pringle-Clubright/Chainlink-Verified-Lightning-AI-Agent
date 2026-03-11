@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using LightningAgent.Chainlink.Services;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
@@ -15,6 +16,7 @@ public class EscrowManager : IEscrowManager
     private readonly IEscrowRepository _escrowRepo;
     private readonly IMilestoneRepository _milestoneRepo;
     private readonly IEventPublisher _eventPublisher;
+    private readonly AutomationService _automation;
     private readonly EscrowSettings _settings;
     private readonly ILogger<EscrowManager> _logger;
 
@@ -23,6 +25,7 @@ public class EscrowManager : IEscrowManager
         IEscrowRepository escrowRepo,
         IMilestoneRepository milestoneRepo,
         IEventPublisher eventPublisher,
+        AutomationService automation,
         IOptions<EscrowSettings> settings,
         ILogger<EscrowManager> logger)
     {
@@ -30,6 +33,7 @@ public class EscrowManager : IEscrowManager
         _escrowRepo = escrowRepo;
         _milestoneRepo = milestoneRepo;
         _eventPublisher = eventPublisher;
+        _automation = automation;
         _settings = settings.Value;
         _logger = logger;
     }
@@ -107,6 +111,22 @@ public class EscrowManager : IEscrowManager
         _logger.LogInformation(
             "Escrow {EscrowId} created for milestone {MilestoneId} (hash={PaymentHash})",
             escrow.Id, milestone.Id, paymentHashHex);
+
+        // Register Chainlink Automation upkeep for escrow expiry monitoring (best-effort)
+        try
+        {
+            var upkeepTx = await _automation.RegisterEscrowExpiryUpkeepAsync(paymentHashHex, ct);
+            if (upkeepTx is not null)
+            {
+                _logger.LogInformation(
+                    "Automation upkeep registered for escrow {EscrowId} expiry (tx={TxHash})",
+                    escrow.Id, upkeepTx);
+            }
+        }
+        catch (Exception autoEx)
+        {
+            _logger.LogDebug(autoEx, "Automation upkeep registration skipped for escrow {EscrowId}", escrow.Id);
+        }
 
         return escrow;
     }

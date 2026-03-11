@@ -11,6 +11,15 @@ public class ChainlinkSettings
     public string DonId { get; set; } = "";
     public string PrivateKeyPath { get; set; } = "";
 
+    // VRF configuration
+    public string VrfKeyHash { get; set; } = "";
+    public string VrfConsumerAddress { get; set; } = "";
+
+    // Additional price feeds
+    public string EthUsdPriceFeedAddress { get; set; } = "";
+    public string LinkUsdPriceFeedAddress { get; set; } = "";
+    public string LinkEthPriceFeedAddress { get; set; } = "";
+
     // CCIP (Cross-Chain Interoperability Protocol)
     public string CcipRouterAddress { get; set; } = "";
     public ulong CcipSourceChainSelector { get; set; }

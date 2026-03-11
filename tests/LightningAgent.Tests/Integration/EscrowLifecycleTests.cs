@@ -8,6 +8,7 @@ using LightningAgent.Core.Models.Lightning;
 using LightningAgent.Data;
 using LightningAgent.Data.Repositories;
 using LightningAgent.Engine;
+using LightningAgent.Chainlink.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,11 +45,20 @@ public class EscrowLifecycleTests : IDisposable
 
         var logger = Substitute.For<ILogger<EscrowManager>>();
 
+        var automationClient = Substitute.For<IChainlinkAutomationClient>();
+        var chainlinkSettings = Substitute.For<IOptions<ChainlinkSettings>>();
+        chainlinkSettings.Value.Returns(new ChainlinkSettings());
+        var automation = new AutomationService(
+            automationClient,
+            chainlinkSettings,
+            Substitute.For<ILogger<AutomationService>>());
+
         _sut = new EscrowManager(
             _lightning,
             _escrowRepo,
             _milestoneRepo,
             _eventPublisher,
+            automation,
             settings,
             logger);
     }

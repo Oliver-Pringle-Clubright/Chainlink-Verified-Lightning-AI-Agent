@@ -163,6 +163,7 @@ builder.Services.AddHostedService<EscrowExpiryChecker>();
 builder.Services.AddHostedService<SpendLimitResetter>();
 builder.Services.AddHostedService<ChainlinkResponsePoller>();
 builder.Services.AddHostedService<VrfAuditSampler>();
+builder.Services.AddHostedService<VrfResponsePoller>();
 builder.Services.AddHostedService<PriceFeedRefresher>();
 builder.Services.AddHostedService<EscrowRetryService>();
 builder.Services.AddHostedService<InvoiceStatusPoller>();

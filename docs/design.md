@@ -1,6 +1,6 @@
 # Chainlink-Verified-Lightning AI-Agent — Architecture & Design
 
-Version 1.6.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
+Version 1.8.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ---
 
@@ -13,7 +13,7 @@ The system rests on three pillars:
 | Pillar | Role |
 |--------|------|
 | **ACP (Agentic Commerce Protocol)** | Discovery, task posting, and agent-to-agent price negotiation. Agents advertise capabilities and bid on work through a standardized protocol. |
-| **Chainlink** | Trustless verification. Chainlink Functions run verification logic off-chain and post proofs on-chain. Chainlink VRF provides unpredictable random audits. Chainlink Price Feeds supply real-time BTC/USD conversion. Chainlink Automation watches for verification completions and triggers settlement callbacks. |
+| **Chainlink** | Trustless verification. Chainlink Functions run verification logic off-chain and post proofs on-chain. Chainlink VRF provides unpredictable random audits via async fulfillment through a consumer contract. Chainlink Price Feeds supply real-time multi-pair conversion (BTC/USD, ETH/USD, LINK/USD, LINK/ETH). Chainlink Automation monitors escrow expiry and task timeouts via registered upkeeps. Chainlink CCIP enables cross-chain agent communication and token transfers. |
 | **Lightning Network** | Instant micropayments. HODL invoices lock satoshis in escrow without a custodian. Settlement reveals a preimage; cancellation returns funds. No on-chain smart contract is required for the payment escrow — the Lightning protocol itself enforces atomicity. |
 
 Together these form an autonomous agent economy: agents register capabilities, tasks arrive in natural language or ACP format, Claude AI decomposes tasks into milestones, the system matches agents by reputation and skill, locks payment in escrow, verifies output through a decentralized pipeline, settles payment atomically, and updates reputation scores — all without human intervention.
@@ -37,7 +37,7 @@ Together these form an autonomous agent economy: agents register capabilities, t
  │                       API Layer                              │
  │  Controllers (Tasks, Agents, Milestones, Payments, Pricing,  │
  │  Disputes, ACP, Stats, Health, Auth, Analytics, Secrets,     │
- │  Dashboard) · SignalR Hub (task/agent groups) · Middleware    │
+ │  Dashboard, CCIP) · SignalR Hub (task/agent groups) ·        │
  │  (ApiKeyAuth, JWT, RateLimiting, CorrelationId,              │
  │   ExceptionHandling, AuditLogging) · HealthChecks (Claude)   │
  └────────────────────────────┬─────────────────────────────────┘
@@ -60,8 +60,8 @@ Together these form an autonomous agent economy: agents register capabilities, t
  │        ││          ││  Model   ││              │
  │LndRest ││Functions ││ClaudeApi ││  Pipeline    │
  │Client  ││Automation││MultiModel││  + Strategies│
- │(+MPP)  ││VRF       ││Client   ││  + Plugins   │
- │(+Chan) ││PriceFeed ││(OpenRtr) ││              │
+ │(+MPP)  ││VRF, CCIP ││Client   ││  + Plugins   │
+ │(+Chan) ││PriceFeeds││(OpenRtr) ││              │
  └───┬────┘└────┬─────┘└────┬────┘└──────┬───────┘
      │          │           │            │
      ▼          ▼           ▼            ▼
@@ -158,13 +158,13 @@ LightningAgent.sln
 | 1 | **LightningAgent.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry, SystemSummary, AgentStats, TimelineEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, JwtSettings, OpenRouterSettings, etc.), all service and repository interfaces (including `ITaskQueue`, `IVerificationPlugin`, `IAnalyticsRepository`). Lightning models: `ChannelBalance`, `LndChannel`, `OpenChannelResult`, `RecommendedPeer`, `MultiPathPaymentResult`. Zero external dependencies. |
 | 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (15 tables with indexes), 16 repository implementations including `AnalyticsRepository`. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
 | 3 | **LightningAgent.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Multi-path payment (MPP) support with configurable `MaxParts`. Channel management: `GetChannelBalanceAsync`, `ListChannelsAsync`, `OpenChannelAsync`. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
-| 4 | **LightningAgent.Chainlink** | Nethereum-based clients for four Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (verifiable random number requests), `ChainlinkPriceFeedClient` (BTC/USD price feed). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all four contracts. |
+| 4 | **LightningAgent.Chainlink** | Nethereum-based clients for five Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (VRF v2+ with async fulfillment via consumer contract and `VrfConsumerAbi`), `ChainlinkPriceFeedClient` (multi-pair price feeds: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ChainlinkCcipClient` (cross-chain messaging via IRouterClient). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all five contract interfaces plus `VrfConsumerAbi`. |
 | 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification. `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
 | 6 | **LightningAgent.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). `MultiModelClient` for OpenRouter integration with task-type-based model selection and automatic fallback to Claude. Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
 | 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type and runs them concurrently via `Task.WhenAll`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
-| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle. `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry). `PaymentService`, `PricingService`, `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `SecretRotationService` for API key validation. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. Ten background services. |
-| 9 | **LightningAgent.Api** | ASP.NET Web API host. Thirteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries. Five middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
-| 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 35 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, and escrow lifecycle. |
+| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PaymentService`, `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. Thirteen background services. |
+| 9 | **LightningAgent.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
+| 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 42 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, escrow lifecycle, and end-to-end workflow orchestration. |
 
 ### Dependency Graph
 
@@ -382,28 +382,32 @@ Tracked metrics:
 **Mechanism:** Verifiable Random Function for unpredictable spot checks
 **What it prevents:** Gaming through selective effort (agents only trying hard on tasks they expect to be audited)
 
-The `VrfAuditSampler` requests a random number from Chainlink VRF every 5 minutes. The random value selects a recently completed task for retroactive audit. Because VRF output is cryptographically unpredictable, agents cannot anticipate which tasks will be audited. Audited tasks undergo sybil detection and anomaly scoring.
+The `VrfAuditSampler` requests a random number from Chainlink VRF v2+ every 5 minutes. The VRF flow is fully asynchronous: a request is sent to the VRF Coordinator, tracked by `VrfResponsePoller` (polling every 15 seconds), and fulfilled when the Coordinator calls back to the consumer contract. The `getRequestStatus(requestId)` function on the consumer returns `(fulfilled: bool, randomWords: uint256[])`. The random value selects a recently completed task for retroactive audit. Because VRF output is cryptographically unpredictable, agents cannot anticipate which tasks will be audited. Audited tasks undergo sybil detection and anomaly scoring. If VRF is not configured or times out (90 seconds), the system falls back to `Random.Shared`.
 
 ---
 
 ## 9. Background Services
 
-Ten `BackgroundService` implementations run as hosted services in the ASP.NET process:
+Thirteen `BackgroundService` implementations run as hosted services in the ASP.NET process:
 
 | Service | Interval | Responsibility |
 |---------|----------|---------------|
 | **EscrowExpiryChecker** | Every 60 seconds | Queries all escrows with status `Held` and cancels any whose `ExpiresAt` has passed. Calls `EscrowManager.CancelEscrowAsync()` which triggers LND invoice cancellation and refund. |
 | **ChainlinkResponsePoller** | Every 30 seconds | Checks pending Chainlink Functions verifications. For each pending verification with a `ChainlinkRequestId`, calls `IChainlinkFunctionsClient.GetResponseAsync()`. Parses the response bytes as a verification score, determines pass/fail (threshold: 0.5), and updates the `Verifications` table. |
-| **VrfAuditSampler** | Every 5 minutes | Requests randomness from Chainlink VRF, selects a completed task from the last 24 hours for audit, runs sybil detection and anomaly scoring against the assigned agent. Logs warnings for high anomaly scores (> 0.7) and sybil alerts. |
-| **PriceFeedRefresher** | Every 5 minutes | Calls `IPricingService.GetBtcUsdPriceAsync()` which reads the Chainlink BTC/USD Price Feed and caches the result in the `PriceCache` table. Ensures the system always has a recent exchange rate for USD-to-sats conversions. |
+| **VrfAuditSampler** | Every 5 minutes | Requests randomness from Chainlink VRF via async fulfillment, selects a completed task from the last 24 hours for audit, runs sybil detection and anomaly scoring against the assigned agent. Falls back to `Random.Shared` if VRF is not configured or times out (90 seconds). |
+| **VrfResponsePoller** | Every 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. Invokes registered callbacks when fulfillment is detected. Times out after 40 attempts (~10 minutes). |
+| **PriceFeedRefresher** | Every 5 minutes | Refreshes all configured Chainlink price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH). Each pair is fetched independently -- failure in one does not block others. Results cached in the `PriceCache` table. |
 | **SpendLimitResetter** | Every 1 hour | Calls `ISpendLimitService.ResetExpiredPeriodsAsync()` to reset spend counters for agents whose daily or weekly period has elapsed. Ensures spend caps roll over correctly. |
 | **AgentWorkerService** | Every 30 seconds | Polls for tasks assigned to active agents. For each agent with assigned work, builds an AI prompt from the task and milestone descriptions, calls Claude to generate output, and submits the result through the TaskLifecycleWorkflow. Configurable via `WorkerAgentSettings` (enabled/disabled, polling interval, batch size). |
 | **EscrowRetryService** | Every 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on first attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, transitions the escrow from `PendingChannel` to `Held`. Logs failures and retries on the next cycle. |
 | **InvoiceStatusPoller** | Every 30 seconds | Polls all `Held` escrows and checks their invoice state via `ILightningClient.GetInvoiceStateAsync()`. If the invoice state is `SETTLED`, updates escrow to `Settled`. If `CANCELLED`/`CANCELED`, updates to `Cancelled`. This catches invoice state changes that occur outside the application's control (e.g., manual settlement or external cancellation). |
 | **SecretRotationService** | Every 6 hours | Validates API keys for Claude and OpenRouter by issuing lightweight requests to their respective APIs. Logs warnings when keys are invalid or expired, prompting administrators to rotate keys via `POST /api/secrets/rotate/claude` or `POST /api/secrets/rotate/openrouter`. |
 | **TaskQueueProcessor** | Continuous | Dequeues task IDs from the in-process `TaskQueue` (backed by `System.Threading.Channels`) and orchestrates each one inside a fresh DI scope via `ITaskOrchestrator.OrchestrateTaskAsync()`. Tasks are enqueued via `POST /api/tasks/{id}/enqueue`. |
+| **CcipMessagePoller** | Every 60 seconds | Checks pending CCIP messages by polling transaction receipts. Extracts messageId from `CCIPSendRequested` events and updates message status (`Sent` → `Delivered` or `Failed`). Times out messages older than 2 hours. |
+| **DataCleanupService** | Every 6 hours | Cleans stale data: price cache entries older than 24 hours, audit log entries older than 90 days, webhook delivery log entries older than 30 days. |
+| **GracefulShutdownService** | On shutdown | Coordinates graceful shutdown of all background services. |
 
-All ten services handle `OperationCanceledException` for graceful shutdown and log errors without crashing the host process.
+All thirteen services handle `OperationCanceledException` for graceful shutdown and log errors without crashing the host process.
 
 ---
 

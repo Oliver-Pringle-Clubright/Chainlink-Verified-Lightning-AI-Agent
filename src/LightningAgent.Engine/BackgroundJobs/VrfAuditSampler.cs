@@ -15,6 +15,11 @@ public class VrfAuditSampler : BackgroundService
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LookbackWindow = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// Time to wait for VRF fulfillment before falling back to Random.
+    /// </summary>
+    private static readonly TimeSpan VrfFulfillmentTimeout = TimeSpan.FromSeconds(90);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VrfAuditSampler> _logger;
 
@@ -40,7 +45,6 @@ public class VrfAuditSampler : BackgroundService
                 var vrfClient = scope.ServiceProvider.GetRequiredService<IChainlinkVrfClient>();
                 var verificationPipeline = scope.ServiceProvider.GetRequiredService<IVerificationPipeline>();
                 var fraudDetector = scope.ServiceProvider.GetRequiredService<IFraudDetector>();
-                var chainlinkSettings = scope.ServiceProvider.GetRequiredService<IOptions<ChainlinkSettings>>().Value;
 
                 var since = DateTime.UtcNow.Subtract(LookbackWindow);
                 var completedTasks = await taskRepo.GetCompletedSinceAsync(since, stoppingToken);
@@ -51,52 +55,12 @@ public class VrfAuditSampler : BackgroundService
                 }
                 else
                 {
-                    int taskIndex;
-                    bool usedVrf = false;
-
-                    // Determine task selection index using VRF or fallback
-                    if (!string.IsNullOrEmpty(chainlinkSettings.VrfCoordinatorAddress))
-                    {
-                        try
-                        {
-                            var vrfResult = await vrfClient.RequestRandomnessAsync(1, stoppingToken);
-
-                            if (vrfResult.Randomness is not null && vrfResult.Randomness.Count > 0)
-                            {
-                                var randomValue = BigInteger.Parse(vrfResult.Randomness[0]);
-                                taskIndex = (int)(BigInteger.Abs(randomValue) % completedTasks.Count);
-                                usedVrf = true;
-                                _logger.LogInformation(
-                                    "VrfAuditSampler using VRF randomness for task selection (requestId={RequestId})",
-                                    vrfResult.RequestId);
-                            }
-                            else
-                            {
-                                _logger.LogWarning(
-                                    "VrfAuditSampler received no randomness from VRF (requestId={RequestId}), falling back to Random",
-                                    vrfResult.RequestId);
-                                taskIndex = Random.Shared.Next(completedTasks.Count);
-                            }
-                        }
-                        catch (Exception vrfEx)
-                        {
-                            _logger.LogWarning(
-                                vrfEx,
-                                "VrfAuditSampler failed to request VRF randomness, falling back to Random");
-                            taskIndex = Random.Shared.Next(completedTasks.Count);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogDebug("VrfAuditSampler VRF coordinator not configured, using Random fallback");
-                        taskIndex = Random.Shared.Next(completedTasks.Count);
-                    }
-
+                    int taskIndex = await SelectTaskIndexAsync(vrfClient, completedTasks.Count, stoppingToken);
                     var selectedTask = completedTasks[taskIndex];
 
                     _logger.LogInformation(
-                        "VrfAuditSampler selected task {TaskId} ('{Title}') for audit (index={Index}/{Total}, vrf={UsedVrf})",
-                        selectedTask.Id, selectedTask.Title, taskIndex, completedTasks.Count, usedVrf);
+                        "VrfAuditSampler selected task {TaskId} ('{Title}') for audit (index={Index}/{Total})",
+                        selectedTask.Id, selectedTask.Title, taskIndex, completedTasks.Count);
 
                     // Get milestones for the selected task
                     var milestones = await milestoneRepo.GetByTaskIdAsync(selectedTask.Id, stoppingToken);
@@ -210,5 +174,58 @@ public class VrfAuditSampler : BackgroundService
         }
 
         _logger.LogInformation("VrfAuditSampler stopped");
+    }
+
+    /// <summary>
+    /// Selects a task index using VRF randomness if configured, with async polling
+    /// for fulfillment. Falls back to Random.Shared if VRF is unavailable or times out.
+    /// </summary>
+    private async Task<int> SelectTaskIndexAsync(
+        IChainlinkVrfClient vrfClient,
+        int taskCount,
+        CancellationToken ct)
+    {
+        if (!vrfClient.IsConfigured)
+        {
+            _logger.LogDebug("VRF not configured, using Random fallback");
+            return Random.Shared.Next(taskCount);
+        }
+
+        try
+        {
+            var vrfRequest = await vrfClient.RequestRandomnessAsync(1, ct);
+            _logger.LogInformation("VRF request sent (requestId={RequestId}), polling for fulfillment...", vrfRequest.RequestId);
+
+            // Poll for fulfillment with timeout
+            var deadline = DateTime.UtcNow + VrfFulfillmentTimeout;
+            while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), ct);
+
+                var result = await vrfClient.GetFulfillmentAsync(vrfRequest.RequestId, ct);
+                if (result?.Randomness is not null && result.Randomness.Count > 0)
+                {
+                    var randomValue = BigInteger.Parse(result.Randomness[0]);
+                    var index = (int)(BigInteger.Abs(randomValue) % taskCount);
+
+                    _logger.LogInformation(
+                        "VRF randomness fulfilled: word={Word}, selected index={Index}/{Total}",
+                        result.Randomness[0][..Math.Min(20, result.Randomness[0].Length)] + "...",
+                        index, taskCount);
+
+                    return index;
+                }
+            }
+
+            _logger.LogWarning(
+                "VRF fulfillment timed out after {Timeout}s, falling back to Random",
+                VrfFulfillmentTimeout.TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VRF request failed, falling back to Random");
+        }
+
+        return Random.Shared.Next(taskCount);
     }
 }

@@ -1,13 +1,14 @@
 using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Interfaces.Services;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
 /// <summary>
-/// Provides BTC/USD pricing and task cost estimation.
+/// Provides multi-pair pricing and task cost estimation via Chainlink oracles.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
@@ -17,13 +18,16 @@ namespace LightningAgent.Api.Controllers;
 public class PricingController : ControllerBase
 {
     private readonly IPriceCacheRepository _priceCacheRepository;
+    private readonly IPricingService _pricingService;
     private readonly ILogger<PricingController> _logger;
 
     public PricingController(
         IPriceCacheRepository priceCacheRepository,
+        IPricingService pricingService,
         ILogger<PricingController> logger)
     {
         _priceCacheRepository = priceCacheRepository;
+        _pricingService = pricingService;
         _logger = logger;
     }
 
@@ -96,5 +100,73 @@ public class PricingController : ControllerBase
             EstimatedUsd = Math.Round(estimatedUsd, 4),
             BtcUsdRate = btcUsdRate
         });
+    }
+
+    /// <summary>
+    /// Get the latest cached price for any supported pair (BTC/USD, ETH/USD, LINK/USD, LINK/ETH).
+    /// </summary>
+    [HttpGet("{pair}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPrice(string pair, CancellationToken ct)
+    {
+        // Normalize pair format: "ethusd" → "ETH/USD", "eth-usd" → "ETH/USD"
+        var normalized = NormalizePair(pair);
+        if (normalized is null)
+            return BadRequest(new { detail = $"Unknown price pair '{pair}'. Supported: btcusd, ethusd, linkusd, linketh" });
+
+        var latest = await _priceCacheRepository.GetLatestAsync(normalized, ct);
+
+        if (latest is null)
+        {
+            // Try fetching live
+            try
+            {
+                var price = await _pricingService.GetPriceAsync(normalized, ct);
+                return Ok(new { pair = normalized, priceUsd = price, source = "Chainlink", fetchedAt = DateTime.UtcNow });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch live price for {Pair}", normalized);
+                return Ok(new { pair = normalized, priceUsd = 0.0, source = "none", fetchedAt = DateTime.UtcNow, message = "Price feed not available." });
+            }
+        }
+
+        return Ok(new { pair = latest.Pair, priceUsd = latest.PriceUsd, source = latest.Source, fetchedAt = latest.FetchedAt });
+    }
+
+    /// <summary>
+    /// Get all available cached prices at once.
+    /// </summary>
+    [HttpGet("all")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllPrices(CancellationToken ct)
+    {
+        var pairs = new[] { "BTC/USD", "ETH/USD", "LINK/USD", "LINK/ETH" };
+        var results = new List<object>();
+
+        foreach (var pair in pairs)
+        {
+            var latest = await _priceCacheRepository.GetLatestAsync(pair, ct);
+            if (latest is not null)
+            {
+                results.Add(new { pair = latest.Pair, priceUsd = latest.PriceUsd, source = latest.Source, fetchedAt = latest.FetchedAt });
+            }
+        }
+
+        return Ok(results);
+    }
+
+    private static string? NormalizePair(string input)
+    {
+        var clean = input.ToUpperInvariant().Replace("-", "").Replace("_", "").Replace("/", "");
+        return clean switch
+        {
+            "BTCUSD" => "BTC/USD",
+            "ETHUSD" => "ETH/USD",
+            "LINKUSD" => "LINK/USD",
+            "LINKETH" => "LINK/ETH",
+            _ => null
+        };
     }
 }

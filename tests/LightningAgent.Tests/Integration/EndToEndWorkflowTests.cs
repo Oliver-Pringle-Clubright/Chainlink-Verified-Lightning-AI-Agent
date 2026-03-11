@@ -10,6 +10,7 @@ using LightningAgent.Core.Models.Lightning;
 using LightningAgent.Data;
 using LightningAgent.Data.Repositories;
 using LightningAgent.Engine;
+using LightningAgent.Chainlink.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -123,6 +124,14 @@ public class EndToEndWorkflowTests : IDisposable
             _claudeAi,
             Substitute.For<ILogger<DeliverableAssembler>>());
 
+        var automationClient = Substitute.For<IChainlinkAutomationClient>();
+        var chainlinkSettings = Substitute.For<IOptions<ChainlinkSettings>>();
+        chainlinkSettings.Value.Returns(new ChainlinkSettings());
+        var automation = new AutomationService(
+            automationClient,
+            chainlinkSettings,
+            Substitute.For<ILogger<AutomationService>>());
+
         return new TaskOrchestrator(
             decompositionEngine,
             _agentMatcher,
@@ -132,6 +141,7 @@ public class EndToEndWorkflowTests : IDisposable
             _reputationService,
             _spendLimitService,
             _eventPublisher,
+            automation,
             assembler,
             _taskRepo,
             _milestoneRepo,

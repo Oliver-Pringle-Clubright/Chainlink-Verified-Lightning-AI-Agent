@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.7.0**
+**Version 1.8.0**
 
 ## Table of Contents
 
@@ -39,7 +39,7 @@ The **Chainlink-Verified Lightning AI-Agent** is a Trust-Verified Agent Freelanc
 The system combines four technologies into a single pipeline:
 
 - **AI Agents (Claude)** decompose tasks, generate outputs, verify quality, and resolve disputes.
-- **Chainlink Oracles** provide on-chain verification (Functions), tamper-proof randomness (VRF) for audit sampling, live BTC/USD price feeds, and automated upkeep (Automation).
+- **Chainlink Oracles** provide on-chain verification (Functions), tamper-proof randomness (VRF) for audit sampling, live multi-pair price feeds (BTC/USD, ETH/USD, LINK/USD, LINK/ETH), automated upkeep (Automation) for escrow expiry and task timeout monitoring, and cross-chain messaging (CCIP).
 - **Lightning Network** handles instant Bitcoin micro-payments through HODL invoices that act as programmable escrow.
 - **Agentic Commerce Protocol (ACP)** gives external agents a standardized way to discover services, post tasks, negotiate prices, and receive completion notifications.
 
@@ -169,10 +169,17 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
   "FunctionsRouterAddress": "",
   "AutomationRegistryAddress": "",
   "VrfCoordinatorAddress": "",
+  "VrfKeyHash": "",
+  "VrfConsumerAddress": "",
   "BtcUsdPriceFeedAddress": "",
-  "SubscriptionId": 0,
+  "EthUsdPriceFeedAddress": "",
+  "LinkUsdPriceFeedAddress": "",
+  "LinkEthPriceFeedAddress": "",
+  "SubscriptionId": "",
   "DonId": "",
-  "PrivateKeyPath": ""
+  "PrivateKeyPath": "",
+  "CcipRouterAddress": "",
+  "CcipSourceChainSelector": 0
 }
 ```
 
@@ -180,12 +187,19 @@ All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each secti
 |---|---|
 | `EthereumRpcUrl` | Your Ethereum JSON-RPC endpoint. Example: `https://sepolia.infura.io/v3/YOUR_KEY` |
 | `FunctionsRouterAddress` | Chainlink Functions Router contract address for on-chain verification requests. |
-| `AutomationRegistryAddress` | Chainlink Automation Registry contract address for automated upkeep tasks (escrow expiry checks, etc.). |
-| `VrfCoordinatorAddress` | Chainlink VRF v2 Coordinator contract address for provably fair random audit sampling. |
-| `BtcUsdPriceFeedAddress` | Chainlink BTC/USD Price Feed contract address for live exchange rate data. |
-| `SubscriptionId` | Your Chainlink Functions subscription ID (integer). |
+| `AutomationRegistryAddress` | Chainlink Automation Registry contract address for automated upkeep tasks (escrow expiry, task timeout). |
+| `VrfCoordinatorAddress` | Chainlink VRF v2+ Coordinator contract address for provably fair random audit sampling. |
+| `VrfKeyHash` | VRF key hash (gas lane) for your subscription. Determines gas price ceiling for VRF callbacks. |
+| `VrfConsumerAddress` | Address of your deployed VRF consumer contract (reads fulfilled randomness via `getRequestStatus`). |
+| `BtcUsdPriceFeedAddress` | Chainlink BTC/USD Price Feed contract address. Sepolia: `0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43` |
+| `EthUsdPriceFeedAddress` | Chainlink ETH/USD Price Feed contract address. Sepolia: `0x694AA1769357215DE4FAC081bf1f309aDC325306` |
+| `LinkUsdPriceFeedAddress` | Chainlink LINK/USD Price Feed contract address. Sepolia: `0xc59E3633BAAC79493d908e63626716e204A45EdF` |
+| `LinkEthPriceFeedAddress` | Chainlink LINK/ETH Price Feed contract address. Sepolia: `0x42585eD362B3f1BCa95c640FdFf35Ef899212734` |
+| `SubscriptionId` | Your Chainlink Functions/VRF subscription ID. |
 | `DonId` | Your Chainlink Functions DON (Decentralized Oracle Network) identifier. |
 | `PrivateKeyPath` | Path to a file containing your Ethereum private key (hex-encoded). Used to sign transactions. **Keep this file secure.** |
+| `CcipRouterAddress` | Chainlink CCIP Router contract address for cross-chain messaging. |
+| `CcipSourceChainSelector` | CCIP chain selector identifying your source chain (e.g., `16015286601757825753` for Ethereum Sepolia). |
 
 ### 4.4 Claude AI
 
@@ -922,14 +936,20 @@ curl http://localhost:5000/api/agents/1
 
 ## 10. Pricing
 
-The system supports flexible pricing with real-time BTC/USD conversion and dynamic estimation.
+The system supports flexible pricing with real-time multi-pair price conversion and dynamic estimation via Chainlink oracles.
 
-### 10.1 BTC/USD Price Feed
+### 10.1 Price Feeds
 
-Get the current exchange rate from Chainlink's on-chain price oracle:
+Get the current exchange rate for any supported pair from Chainlink's on-chain price oracles:
 
 ```bash
+# BTC/USD (dedicated endpoint)
 curl http://localhost:5000/api/pricing/btcusd
+
+# Any supported pair via generic endpoint
+curl http://localhost:5000/api/pricing/ethusd
+curl http://localhost:5000/api/pricing/linkusd
+curl http://localhost:5000/api/pricing/linketh
 ```
 
 Response:
@@ -938,12 +958,40 @@ Response:
 {
   "pair": "BTC/USD",
   "priceUsd": 97432.15,
-  "source": "chainlink",
-  "fetchedAt": "2026-03-09T12:00:00Z"
+  "source": "Chainlink",
+  "fetchedAt": "2026-03-11T12:00:00Z"
 }
 ```
 
-The price is refreshed automatically by the `PriceFeedRefresher` background service.
+**Supported price pairs:**
+
+| Pair | Endpoint | Sepolia Feed Address |
+|------|----------|---------------------|
+| BTC/USD | `/api/pricing/btcusd` or `/api/pricing/BTCUSD` | `0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43` |
+| ETH/USD | `/api/pricing/ethusd` or `/api/pricing/ETH-USD` | `0x694AA1769357215DE4FAC081bf1f309aDC325306` |
+| LINK/USD | `/api/pricing/linkusd` or `/api/pricing/LINK/USD` | `0xc59E3633BAAC79493d908e63626716e204A45EdF` |
+| LINK/ETH | `/api/pricing/linketh` or `/api/pricing/link_eth` | `0x42585eD362B3f1BCa95c640FdFf35Ef899212734` |
+
+The pair endpoint normalizes input: `ethusd`, `ETH-USD`, `ETH/USD`, and `eth_usd` all resolve to `ETH/USD`.
+
+#### Get All Prices
+
+```bash
+curl http://localhost:5000/api/pricing/all
+```
+
+Returns all cached prices at once:
+
+```json
+[
+  { "pair": "BTC/USD", "priceUsd": 97432.15, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "ETH/USD", "priceUsd": 3850.00, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "LINK/USD", "priceUsd": 18.50, "source": "Chainlink", "fetchedAt": "..." },
+  { "pair": "LINK/ETH", "priceUsd": 0.00480519, "source": "Chainlink", "fetchedAt": "..." }
+]
+```
+
+All prices are refreshed automatically every 5 minutes by the `PriceFeedRefresher` background service. Each pair is only refreshed if its corresponding feed address is configured.
 
 ### 10.2 Estimate Task Cost
 
@@ -983,7 +1031,7 @@ Response:
 - The `MarginMultiplier` (default: 1.05) adds a 5% margin to base estimates.
 - Agents set their own `priceSatsPerUnit` in their capability definitions.
 - **ACP negotiation** computes the midpoint between the requester's budget and the worker's asking price.
-- BTC/USD conversion uses live Chainlink Price Feed data, with a fallback estimate if the feed is unavailable.
+- BTC/USD conversion uses live Chainlink Price Feed data, with a fallback estimate if the feed is unavailable. ETH/USD, LINK/USD, and LINK/ETH feeds are also available for multi-asset pricing.
 - **Spend limits** prevent runaway costs: daily, weekly, and per-task maximums are enforced.
 
 ---
@@ -1021,8 +1069,9 @@ The following services run automatically as hosted background jobs:
 | Service | Purpose |
 |---|---|
 | `EscrowExpiryChecker` | Cancels expired HODL invoices and releases locked funds. |
-| `PriceFeedRefresher` | Periodically fetches the latest BTC/USD price from the Chainlink oracle. |
-| `VrfAuditSampler` | Uses Chainlink VRF to randomly select completed milestones for additional verification audits. |
+| `PriceFeedRefresher` | Periodically fetches prices for all configured pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH) from Chainlink oracles. |
+| `VrfAuditSampler` | Uses Chainlink VRF (async fulfillment via consumer contract) to randomly select completed milestones for additional verification audits. |
+| `VrfResponsePoller` | Polls pending VRF requests every 15 seconds for fulfillment from the VRF consumer contract. |
 | `ChainlinkResponsePoller` | Polls for Chainlink Functions responses (on-chain verification results). |
 | `SpendLimitResetter` | Resets daily and weekly spend counters on schedule. |
 | `AgentWorkerService` | Autonomous AI agent that generates task output using Claude AI. |
@@ -1757,6 +1806,8 @@ environment:
 | `GET` | `/api/disputes/{id}` | Get dispute details |
 | `POST` | `/api/disputes/{id}/resolve` | Resolve a dispute |
 | `GET` | `/api/pricing/btcusd` | Get current BTC/USD price |
+| `GET` | `/api/pricing/{pair}` | Get price for any supported pair (ethusd, linkusd, linketh) |
+| `GET` | `/api/pricing/all` | Get all cached prices at once |
 | `POST` | `/api/pricing/estimate` | Estimate task cost |
 | `GET` | `/api/acp/services` | ACP service discovery |
 | `POST` | `/api/acp/tasks` | Post task via ACP |
@@ -1792,22 +1843,13 @@ environment:
 
 ---
 
-## 24. Cross-Chain Interoperability via CCIP (v1.7.0)
+## 24. Cross-Chain Interoperability via CCIP
 
-Version 1.7.0 adds Chainlink CCIP (Cross-Chain Interoperability Protocol) support, enabling agents to communicate and transfer tokens across different blockchain networks.
+Chainlink CCIP (Cross-Chain Interoperability Protocol) enables agents to communicate and transfer tokens across different blockchain networks.
 
 ### 24.1 Configuration
 
-Add the CCIP router address and source chain selector to `Chainlink` settings:
-
-```json
-"Chainlink": {
-  "CcipRouterAddress": "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
-  "CcipSourceChainSelector": 16015286601757825753
-}
-```
-
-The `CcipRouterAddress` is the Chainlink CCIP Router contract for your source chain. The `CcipSourceChainSelector` identifies your chain in CCIP's network (e.g., `16015286601757825753` for Ethereum Sepolia).
+The CCIP settings (`CcipRouterAddress` and `CcipSourceChainSelector`) are configured in the `Chainlink` section -- see [Section 4.3](#43-chainlink) above.
 
 ### 24.2 Supported Chains
 
@@ -1855,3 +1897,37 @@ All CCIP messages are persisted in the `CcipMessages` table. The `CcipMessagePol
 ### 24.6 Database Migration
 
 Migration `1.7.0` creates the `CcipMessages` table with indexes on `MessageId`, `Status+Direction`, `TaskId`, `AgentId`, and `CreatedAt`.
+
+---
+
+## 25. VRF, Automation & Multi-Price Feed Enhancements (v1.8.0)
+
+Version 1.8.0 delivers three enhancements to the Chainlink integration:
+
+### 25.1 VRF Async Fulfillment
+
+VRF randomness is now handled asynchronously via a dedicated consumer contract. Instead of blocking on a VRF response, the system:
+
+1. Requests randomness from the VRF Coordinator with the configured `VrfKeyHash` (gas lane).
+2. Tracks the pending request in `VrfResponsePoller` (polls every 15 seconds).
+3. Reads fulfillment from the consumer contract's `getRequestStatus(requestId)` function.
+4. Returns `(fulfilled: bool, randomWords: uint256[])` when the VRF callback completes.
+
+The `VrfAuditSampler` uses this async flow with a 90-second timeout and falls back to `Random.Shared` if VRF is unavailable.
+
+**Required configuration:**
+- `VrfKeyHash` -- gas lane key hash for your VRF subscription
+- `VrfConsumerAddress` -- your deployed VRF consumer contract (e.g., `0xf02dbf1b43937da1f8c970f08dc8e9c8a282d162`)
+
+### 25.2 Automation-Wired Escrow & Task Lifecycle
+
+Chainlink Automation is now integrated into the core task lifecycle:
+
+- **Escrow expiry upkeep**: When an escrow is created, an Automation upkeep is registered to monitor its expiry timestamp. If the on-chain check detects expiry, the upkeep triggers cancellation.
+- **Task timeout upkeep**: When an agent is assigned to a subtask, an Automation upkeep monitors the task timeout. If the deadline passes without completion, the upkeep triggers task failure handling.
+
+Both registrations are best-effort -- if the Automation Registry is not configured or the transaction fails, the system falls back to the existing background polling services (EscrowExpiryChecker, etc.).
+
+### 25.3 Multi-Pair Price Feeds
+
+The system now supports four Chainlink price feed pairs instead of just BTC/USD. See [Section 10.1](#101-price-feeds) for full details on endpoints and configuration.
