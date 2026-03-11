@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChainlinkVrfClient, ChainlinkVrfClient>();
         services.AddScoped<IChainlinkAutomationClient, ChainlinkAutomationClient>();
         services.AddScoped<AutomationService>();
+        services.AddScoped<IChainlinkCcipClient, ChainlinkCcipClient>();
         return services;
     }
 }

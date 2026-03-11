@@ -10,4 +10,8 @@ public class ChainlinkSettings
     public string SubscriptionId { get; set; } = "";
     public string DonId { get; set; } = "";
     public string PrivateKeyPath { get; set; } = "";
+
+    // CCIP (Cross-Chain Interoperability Protocol)
+    public string CcipRouterAddress { get; set; } = "";
+    public ulong CcipSourceChainSelector { get; set; }
 }

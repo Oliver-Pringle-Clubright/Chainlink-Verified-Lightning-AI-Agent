@@ -55,6 +55,7 @@ builder.Services.AddScoped<IVerificationStrategyConfigRepository, VerificationSt
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IWebhookLogRepository, WebhookLogRepository>();
 builder.Services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
+builder.Services.AddScoped<ICcipMessageRepository, CcipMessageRepository>();
 
 // ── Configuration sections ──────────────────────────────────────────
 builder.Services.Configure<LightningSettings>(builder.Configuration.GetSection("Lightning"));
@@ -167,6 +168,8 @@ builder.Services.AddHostedService<EscrowRetryService>();
 builder.Services.AddHostedService<InvoiceStatusPoller>();
 builder.Services.AddHostedService<SecretRotationService>();
 builder.Services.AddHostedService<DataCleanupService>();
+builder.Services.AddHostedService<CcipMessagePoller>();
+builder.Services.AddScoped<CcipBridgeService>();
 
 // ── Task Queue (background orchestration) ────────────────────────────
 builder.Services.AddSingleton<ITaskQueue, TaskQueue>();

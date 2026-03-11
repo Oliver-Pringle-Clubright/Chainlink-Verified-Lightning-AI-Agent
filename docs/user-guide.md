@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 1.6.0**
+**Version 1.7.0**
 
 ## Table of Contents
 
@@ -1780,3 +1780,78 @@ environment:
 | `GET` | `/api/admin/backups` | List available backups (admin only) |
 | `POST` | `/api/admin/backup/restore` | Restore database from backup (admin only) |
 | `GET` | `/dashboard` | Dashboard UI redirect |
+| `GET` | `/api/v1/ccip/chains` | List known CCIP-supported chains |
+| `GET` | `/api/v1/ccip/chains/{selector}/supported` | Check if chain is supported by router (admin) |
+| `POST` | `/api/v1/ccip/estimate-fee` | Estimate CCIP messaging fee (admin) |
+| `POST` | `/api/v1/ccip/send-message` | Send cross-chain message via CCIP (admin) |
+| `POST` | `/api/v1/ccip/send-tokens` | Send cross-chain token transfer via CCIP (admin) |
+| `POST` | `/api/v1/ccip/send-verification` | Send verification proof cross-chain (admin) |
+| `GET` | `/api/v1/ccip/messages` | List recent CCIP messages |
+| `GET` | `/api/v1/ccip/messages/{messageId}` | Get CCIP message by ID |
+| `GET` | `/api/v1/ccip/tasks/{taskId}/messages` | List CCIP messages for a task |
+
+---
+
+## 24. Cross-Chain Interoperability via CCIP (v1.7.0)
+
+Version 1.7.0 adds Chainlink CCIP (Cross-Chain Interoperability Protocol) support, enabling agents to communicate and transfer tokens across different blockchain networks.
+
+### 24.1 Configuration
+
+Add the CCIP router address and source chain selector to `Chainlink` settings:
+
+```json
+"Chainlink": {
+  "CcipRouterAddress": "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
+  "CcipSourceChainSelector": 16015286601757825753
+}
+```
+
+The `CcipRouterAddress` is the Chainlink CCIP Router contract for your source chain. The `CcipSourceChainSelector` identifies your chain in CCIP's network (e.g., `16015286601757825753` for Ethereum Sepolia).
+
+### 24.2 Supported Chains
+
+CCIP supports multiple testnet and mainnet lanes. Query `GET /api/v1/ccip/chains` for the complete list. Key supported chains include:
+
+| Chain | Selector | Network |
+|-------|----------|---------|
+| Ethereum Sepolia | 16015286601757825753 | Testnet |
+| Arbitrum Sepolia | 3478487238524512106 | Testnet |
+| Optimism Sepolia | 2664363617261496610 | Testnet |
+| Base Sepolia | 10344971235874465080 | Testnet |
+| Avalanche Fuji | 14767482510784806043 | Testnet |
+| Polygon Amoy | 9284632837123596123 | Testnet |
+| Ethereum Mainnet | 5009297550715157269 | Mainnet |
+| Arbitrum One | 4949039107694359620 | Mainnet |
+| Optimism | 3734403246176062136 | Mainnet |
+| Base | 15971525489660198786 | Mainnet |
+
+### 24.3 Cross-Chain Use Cases
+
+**Task Assignment**: Delegate tasks to worker agents on remote chains via `POST /api/v1/ccip/send-message`.
+
+**Verification Proof Bridging**: Send on-chain verification attestations to destination chains via `POST /api/v1/ccip/send-verification`.
+
+**Cross-Chain Payments**: Transfer tokens to agents on different chains via `POST /api/v1/ccip/send-tokens`.
+
+### 24.4 Fee Estimation
+
+Before sending, estimate CCIP fees with `POST /api/v1/ccip/estimate-fee`:
+
+```json
+{
+  "destinationChainSelector": 3478487238524512106,
+  "receiverAddress": "0xYourReceiverContract",
+  "payloadHex": "0x..."
+}
+```
+
+Fees are paid in the native token (ETH) by default.
+
+### 24.5 Message Tracking
+
+All CCIP messages are persisted in the `CcipMessages` table. The `CcipMessagePoller` background service checks transaction receipts every 60 seconds and updates message status (`Pending` → `Sent` → `Delivered` or `Failed`). Messages that are not delivered within 2 hours are automatically marked as `Failed`.
+
+### 24.6 Database Migration
+
+Migration `1.7.0` creates the `CcipMessages` table with indexes on `MessageId`, `Status+Direction`, `TaskId`, `AgentId`, and `CreatedAt`.

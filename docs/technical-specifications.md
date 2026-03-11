@@ -1,6 +1,6 @@
 # Technical Specifications
 
-> Chainlink-Verified Lightning AI-Agent v1.6.0 -- comprehensive technical reference.
+> Chainlink-Verified Lightning AI-Agent v1.7.0 -- comprehensive technical reference.
 
 ---
 
@@ -14,7 +14,7 @@
 | Data Access | Classic ADO.NET | No ORM -- raw `SqliteCommand` |
 | Lightning | LND REST API v2 | via `HttpClient` + macaroon auth |
 | Blockchain | Ethereum (Sepolia / Mainnet) | via Nethereum 4.x |
-| Oracles | Chainlink (Functions, VRF, Automation, Price Feeds) | Sepolia / Mainnet contracts |
+| Oracles | Chainlink (Functions, VRF, Automation, Price Feeds, CCIP) | Sepolia / Mainnet contracts |
 | AI (Primary) | Claude API (Anthropic) | API version `2023-06-01`, default model `claude-sonnet-4-20250514` |
 | AI (Multi-model) | OpenRouter | OpenAI-compatible chat completions API, task-type model selection |
 | Protocol | ACP (Agentic Commerce Protocol) | Custom REST implementation |
@@ -1894,3 +1894,89 @@ Defined in `Directory.Build.props` and inherited by all projects:
 | `Nullable` | `enable` |
 | `ImplicitUsings` | `enable` |
 | `LangVersion` | `latest` |
+
+---
+
+## 25. Chainlink CCIP Integration (v1.7.0)
+
+### Architecture
+
+CCIP (Cross-Chain Interoperability Protocol) enables the Lightning Agent to communicate across EVM chains. The implementation follows the same patterns as the existing Chainlink integrations:
+
+```
+CcipController (API)
+  └── CcipBridgeService (Engine) -- high-level operations
+        └── ChainlinkCcipClient (Chainlink) -- low-level router interaction
+              └── CcipRouterAbi (Contracts) -- IRouterClient ABI
+```
+
+### Contract Interface
+
+Uses the standard Chainlink CCIP Router (`IRouterClient`) with three core functions:
+- `isChainSupported(uint64)` — checks lane availability
+- `getFee(uint64, EVM2AnyMessage)` — estimates cross-chain messaging fee
+- `ccipSend(uint64, EVM2AnyMessage)` — sends a cross-chain message
+
+### EVM2AnyMessage Struct
+
+```
+struct EVM2AnyMessage {
+  bytes   receiver;      // abi.encode(address)
+  bytes   data;          // arbitrary payload
+  tuple[] tokenAmounts;  // (address token, uint256 amount)[]
+  address feeToken;      // address(0) for native token
+  bytes   extraArgs;     // EVMExtraArgsV1: tag(4 bytes) + abi.encode(gasLimit)
+}
+```
+
+### Data Model
+
+**CcipMessages table** (migration 1.7.0):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| Id | INTEGER PK | Auto-increment |
+| MessageId | TEXT | CCIP message ID (bytes32 hex) |
+| SourceChainSelector | INTEGER | Source chain CCIP selector |
+| DestinationChainSelector | INTEGER | Destination chain CCIP selector |
+| SenderAddress | TEXT | Sender wallet address |
+| ReceiverAddress | TEXT | Destination contract address |
+| Payload | TEXT | Base64-encoded message payload |
+| TokenAddress | TEXT | ERC-20 token address (nullable) |
+| TokenAmountWei | INTEGER | Token transfer amount |
+| FeeToken | TEXT | Fee token address |
+| Direction | TEXT | `Outbound` or `Inbound` |
+| Status | TEXT | `Pending`, `Sent`, `Delivered`, `Failed` |
+| TxHash | TEXT | Transaction hash |
+| TaskId | INTEGER | Associated task (nullable) |
+| AgentId | INTEGER | Associated agent (nullable) |
+
+### Background Polling
+
+`CcipMessagePoller` runs every 60 seconds and:
+1. Queries `CcipMessages` with `Status = 'Sent'` and `Direction = 'Outbound'`
+2. Checks the Ethereum transaction receipt for each message
+3. Extracts the CCIP messageId from the `CCIPSendRequested` event log
+4. Marks messages as `Delivered` (receipt.status == 1) or `Failed` (reverted)
+5. Times out messages older than 2 hours
+
+### Service Registration
+
+```csharp
+// In ServiceCollectionExtensions.cs (Chainlink project)
+services.AddScoped<IChainlinkCcipClient, ChainlinkCcipClient>();
+
+// In Program.cs (API project)
+builder.Services.AddScoped<ICcipMessageRepository, CcipMessageRepository>();
+builder.Services.AddScoped<CcipBridgeService>();
+builder.Services.AddHostedService<CcipMessagePoller>();
+```
+
+### Configuration
+
+```json
+"Chainlink": {
+  "CcipRouterAddress": "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
+  "CcipSourceChainSelector": 16015286601757825753
+}
+```

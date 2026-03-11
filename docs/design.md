@@ -554,7 +554,11 @@ The system includes a multi-stage Dockerfile (`src/LightningAgent.Api/Dockerfile
 
 ### Database Migrations
 
-The `MigrationRunner` executes versioned SQL migrations on startup. Migrations are tracked in a `__Migrations` table with version, name, and applied timestamp. Migrations include v1.1.0 (adding `WebhookUrl`, `ApiKeyHash`, and `RateLimitPerMinute` columns to the `Agents` table) and subsequent migrations for analytics tables and escrow status extensions.
+The `MigrationRunner` executes versioned SQL migrations on startup. Migrations are tracked in a `__Migrations` table with version, name, and applied timestamp. Migrations include v1.1.0 (adding `WebhookUrl`, `ApiKeyHash`, and `RateLimitPerMinute` columns to the `Agents` table), subsequent migrations for analytics tables and escrow status extensions, and v1.7.0 (adding the `CcipMessages` table for cross-chain interoperability tracking).
+
+### Chainlink CCIP (Cross-Chain Interoperability)
+
+The system supports cross-chain agent communication and token transfers via Chainlink CCIP. The `CcipBridgeService` provides high-level operations (task assignment, verification proof bridging, cross-chain payments) that delegate to `ChainlinkCcipClient` for low-level router interaction. The `CcipMessagePoller` background service tracks delivery status by polling transaction receipts. All messages are persisted in the `CcipMessages` table with full lifecycle tracking (`Pending` → `Sent` → `Delivered` / `Failed`).
 
 ### Resilience
 

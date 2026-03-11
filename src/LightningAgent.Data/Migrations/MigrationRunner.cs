@@ -134,5 +134,33 @@ public class MigrationRunner
             );
             CREATE INDEX IF NOT EXISTS IX_IdempotencyKeys_CreatedAt ON IdempotencyKeys(CreatedAt);
         ");
+
+        yield return ("1.7.0", "Add CcipMessages table for cross-chain interoperability protocol tracking", @"
+            CREATE TABLE IF NOT EXISTS CcipMessages (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                MessageId TEXT NOT NULL,
+                SourceChainSelector INTEGER NOT NULL,
+                DestinationChainSelector INTEGER NOT NULL,
+                SenderAddress TEXT NOT NULL,
+                ReceiverAddress TEXT NOT NULL,
+                Payload TEXT NOT NULL,
+                TokenAddress TEXT,
+                TokenAmountWei INTEGER NOT NULL DEFAULT 0,
+                FeeToken TEXT NOT NULL,
+                Direction TEXT NOT NULL DEFAULT 'Outbound',
+                Status TEXT NOT NULL DEFAULT 'Pending',
+                TxHash TEXT,
+                ErrorDetails TEXT,
+                TaskId INTEGER,
+                AgentId INTEGER,
+                CreatedAt TEXT NOT NULL,
+                DeliveredAt TEXT
+            );
+            CREATE INDEX IF NOT EXISTS IX_CcipMessages_MessageId ON CcipMessages(MessageId);
+            CREATE INDEX IF NOT EXISTS IX_CcipMessages_Status_Direction ON CcipMessages(Status, Direction);
+            CREATE INDEX IF NOT EXISTS IX_CcipMessages_TaskId ON CcipMessages(TaskId);
+            CREATE INDEX IF NOT EXISTS IX_CcipMessages_AgentId ON CcipMessages(AgentId);
+            CREATE INDEX IF NOT EXISTS IX_CcipMessages_CreatedAt ON CcipMessages(CreatedAt);
+        ");
     }
 }
