@@ -5,8 +5,14 @@ namespace LightningAgent.Lightning;
 /// <summary>
 /// Static helper that creates an <see cref="HttpClientHandler"/> configured for LND's TLS certificate.
 /// </summary>
-internal static class LndTlsCertHandler
+public static class LndTlsCertHandler
 {
+    /// <summary>
+    /// When true, allows DangerousAcceptAnyServerCertificateValidator as a fallback
+    /// when no TLS cert path is provided. Must be explicitly set at startup.
+    /// </summary>
+    public static bool AllowInsecureDevelopmentMode { get; set; }
+
     public static HttpClientHandler CreateHttpClientHandler(string tlsCertPath)
     {
         var handler = new HttpClientHandler();
@@ -25,11 +31,19 @@ internal static class LndTlsCertHandler
                     || errors == System.Net.Security.SslPolicyErrors.None;
             };
         }
-        else
+        else if (AllowInsecureDevelopmentMode)
         {
-            // Dev / self-signed mode: trust all certificates
+            // Dev-only: trust all certificates. This is gated behind an explicit opt-in
+            // that Program.cs only sets when ASPNETCORE_ENVIRONMENT=Development.
             handler.ServerCertificateCustomValidationCallback =
                 HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Lightning:TlsCertPath is not configured or the file does not exist. " +
+                "TLS certificate validation is required in non-development environments. " +
+                "Provide the LND TLS certificate path in configuration.");
         }
 
         return handler;

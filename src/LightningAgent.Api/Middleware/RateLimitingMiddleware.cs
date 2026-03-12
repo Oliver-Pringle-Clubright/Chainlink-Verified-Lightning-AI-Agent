@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using LightningAgent.Api.DTOs;
 
 namespace LightningAgent.Api.Middleware;
 
@@ -82,14 +83,11 @@ public class RateLimitingMiddleware
             context.Response.ContentType = "application/problem+json";
             context.Response.Headers["Retry-After"] = "60";
 
-            await context.Response.WriteAsJsonAsync(new
-            {
-                type = "https://tools.ietf.org/html/rfc6585#section-4",
-                title = "Too Many Requests",
-                status = 429,
-                detail = $"Rate limit of {limit} requests per minute exceeded.",
-                traceId = context.TraceIdentifier
-            });
+            var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid?.ToString() : null;
+            var error = ApiError.TooManyRequests($"Rate limit of {limit} requests per minute exceeded. Retry after 60 seconds.");
+            error.CorrelationId = correlationId;
+            error.TraceId = context.TraceIdentifier;
+            await context.Response.WriteAsJsonAsync(error);
             return;
         }
 

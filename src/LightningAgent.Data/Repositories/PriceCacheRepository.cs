@@ -26,6 +26,27 @@ public class PriceCacheRepository : IPriceCacheRepository
         return await reader.ReadAsync() ? MapPriceQuote(reader) : null;
     }
 
+    public async Task<IReadOnlyList<PriceQuote>> GetAllLatestAsync(CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        // Get the most recent price for each distinct pair
+        cmd.CommandText = $@"
+            SELECT {SelectColumns} FROM PriceCache pc1
+            WHERE FetchedAt = (
+                SELECT MAX(pc2.FetchedAt) FROM PriceCache pc2 WHERE pc2.Pair = pc1.Pair
+            )
+            ORDER BY Pair";
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<PriceQuote>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapPriceQuote(reader));
+        }
+        return results;
+    }
+
     public async Task<IReadOnlyList<PriceQuote>> GetHistoryAsync(string pair, DateTime from, DateTime to)
     {
         using var connection = _connectionFactory.CreateConnection();

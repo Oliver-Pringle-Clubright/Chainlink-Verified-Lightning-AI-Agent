@@ -35,6 +35,21 @@ public interface ITaskRepository
         int? cursor = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Full-text search across task titles and descriptions.
+    /// </summary>
+    Task<(IReadOnlyList<TaskItem> Items, int TotalCount)> SearchAsync(
+        string query,
+        int offset,
+        int limit,
+        TaskStatus? status = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves multiple tasks by their IDs in a single query.
+    /// </summary>
+    Task<IReadOnlyList<TaskItem>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default);
+
     Task<int> CreateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateAsync(TaskItem task, CancellationToken ct = default);
     Task UpdateStatusAsync(int id, TaskStatus status, CancellationToken ct = default);

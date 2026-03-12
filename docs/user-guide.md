@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 2.1.0**
+**Version 2.2.0**
 
 ## Table of Contents
 
@@ -29,6 +29,8 @@
 23. [Security Hardening](#23-security-hardening-v160)
 24. [Troubleshooting](#24-troubleshooting)
 25. [Docker Deployment](#25-docker-deployment)
+26. [Production Viability (v2.2.0)](#26-production-viability-v220)
+27. [Usability Enhancements (v2.2.0)](#27-usability-enhancements-v220)
 
 ---
 
@@ -2041,3 +2043,156 @@ Both registrations are best-effort -- if the Automation Registry is not configur
 ### 25.3 Multi-Pair Price Feeds
 
 The system now supports four Chainlink price feed pairs instead of just BTC/USD. See [Section 10.1](#101-price-feeds) for full details on endpoints and configuration.
+
+## 26. Production Viability (v2.2.0)
+
+### 26.1 Verification Timeout with AI Judge Fallback
+
+When a Chainlink Functions verification exceeds the 30-minute timeout (60 retries x 30 seconds), the system now:
+
+1. Attempts a local AI judge fallback using `AiJudgeAgent.JudgeOutputAsync()` to evaluate the milestone output.
+2. If the AI judge passes the verification, the milestone is marked as passed with the AI judge's score and reasoning.
+3. If the AI judge fails or no output is available, the verification is marked as failed and the stuck escrow is automatically cancelled via `IEscrowManager.CancelEscrowAsync()`.
+
+This prevents escrows from being locked indefinitely when Chainlink Functions are unresponsive.
+
+### 26.2 Stale Task Reassignment
+
+The `StaleTaskReassigner` background service runs every 10 minutes and detects tasks stuck in `Assigned` or `InProgress` status for more than 2 hours without any `UpdatedAt` change. For each stale task:
+
+- Held escrows on the task's milestones are cancelled.
+- The task is reset to `Pending` with `AssignedAgentId` cleared so it can be picked up by another agent.
+
+This prevents task orphaning when an assigned agent becomes unresponsive.
+
+### 26.3 Claude API Failover via OpenRouter
+
+`IClaudeAiClient` now resolves to `MultiModelClient` instead of `ClaudeApiClient`. The `MultiModelClient`:
+
+- Tries OpenRouter first (supports routing to different models based on task type hints).
+- Falls back automatically to the direct Claude API (`ClaudeApiClient`) if OpenRouter is unavailable, misconfigured, or returns an error.
+- If OpenRouter's API key is not configured, falls back immediately to Claude without attempting OpenRouter.
+
+Configure OpenRouter in `appsettings.json`:
+
+```json
+"OpenRouter": {
+  "ApiKey": "sk-or-...",
+  "BaseUrl": "https://openrouter.ai/api/v1",
+  "DefaultModel": "anthropic/claude-sonnet-4-20250514"
+}
+```
+
+### 26.4 Automated Database Backups
+
+The `AutomatedBackupService` background service performs scheduled SQLite backups using `VACUUM INTO`:
+
+- Runs on a configurable interval (default: every 24 hours).
+- Automatically prunes old backups beyond the retention limit (default: keep 7).
+- Only prunes auto-backups (`lightningagent_auto_*.db`), preserving manual backups.
+
+Configuration in `appsettings.json`:
+
+```json
+"Backup": {
+  "BackupDirectory": "./backups/",
+  "AutoBackupEnabled": true,
+  "BackupIntervalHours": 24,
+  "MaxBackupsToKeep": 7
+}
+```
+
+### 26.5 Network Mismatch Blocks Startup
+
+`StartupValidator.ValidateChainIdAsync()` now throws `InvalidOperationException` when a network mismatch is detected in production mode:
+
+- `Network:IsTest=true` but connected to a mainnet chain (Ethereum, Polygon, BSC).
+- `Network:IsTest=false` but connected to a testnet chain.
+
+In development mode (`ApiSecurity:DevMode=true`), a warning is logged but startup continues.
+
+## 27. Usability Enhancements (v2.2.0)
+
+### 27.1 Enhanced Dashboard
+
+The dashboard (`/dashboard.html`) now features a tabbed navigation interface with five views:
+
+| Tab | Description |
+|-----|-------------|
+| **Overview** | Summary stat cards, 30-day timeline chart, recent tasks, agents list |
+| **Tasks** | Full-text search, status filtering, pagination, click-to-expand task detail with milestones |
+| **Create Task** | Complete task creation form with validation, all fields, natural language toggle |
+| **Payments** | Payment history with task/agent filtering and cursor-based pagination |
+| **Live Events** | Expanded real-time event stream (100 items) with all event types |
+
+The dashboard connects via SignalR for real-time updates and auto-refreshes every 15 seconds.
+
+### 27.2 Standardized Error Responses
+
+All API errors now follow the RFC 7807 (Problem Details) standard with a consistent `ApiError` schema:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Title is required.",
+  "correlationId": "abc-123",
+  "traceId": "00-...",
+  "errors": null
+}
+```
+
+The `ExceptionHandlingMiddleware` now maps exception types to appropriate HTTP status codes:
+
+| Exception | Status Code |
+|-----------|-------------|
+| `InvalidOperationException` / `ArgumentException` | 400 Bad Request |
+| `KeyNotFoundException` | 404 Not Found |
+| `UnauthorizedAccessException` | 403 Forbidden |
+| `OperationCanceledException` | 499 Client Closed Request |
+| All other exceptions | 500 Internal Server Error (generic message) |
+
+Rate limit responses (`429`) also use the `ApiError` format and include `Retry-After` header and retry guidance in the detail message.
+
+### 27.3 Expanded Real-Time Notifications
+
+Three new SignalR events have been added to `IEventPublisher`:
+
+| Event | Payload | When Fired |
+|-------|---------|------------|
+| `TaskStatusChanged` | `taskId`, `previousStatus`, `newStatus`, `agentId` | Any task status transition |
+| `EscrowCreated` | `escrowId`, `milestoneId`, `amountSats` | New escrow created for a milestone |
+| `EscrowCancelled` | `escrowId`, `milestoneId`, `amountSats`, `reason` | Escrow cancelled (timeout, stale task, etc.) |
+
+These join the existing 7 events (TaskAssigned, MilestoneVerified, PaymentSent, DisputeOpened, EscrowSettled, VerificationFailed, AgentRegistered) for a total of 10 real-time event types.
+
+### 27.4 Task Search
+
+Search tasks by title or description using the new endpoint:
+
+```
+GET /api/tasks/search?q=keyword&status=InProgress&page=1&pageSize=20
+```
+
+Returns a standard `PaginatedResponse<TaskDetailResponse>` with `totalCount`, `hasMore`, and `nextCursor` for efficient pagination. The search uses SQL LIKE matching with support for status filtering.
+
+### 27.5 Batch Operations
+
+Two new batch endpoints reduce API round-trips for multi-task workflows:
+
+**Batch Create** (up to 50 tasks):
+```
+POST /api/tasks/batch
+Body: [ { "title": "...", "description": "...", ... }, ... ]
+```
+
+Returns per-item results with `success`, `taskId`, `externalId`, or `error` for each task.
+
+**Batch Status** (up to 100 task IDs):
+```
+POST /api/tasks/batch/status
+Body: [1, 2, 3, 42]
+```
+
+Returns the full `TaskDetailResponse` for each requested task ID in a single query.

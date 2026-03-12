@@ -235,6 +235,78 @@ public class TaskRepository : ITaskRepository
             : "";
     }
 
+    public async Task<(IReadOnlyList<TaskItem> Items, int TotalCount)> SearchAsync(
+        string query,
+        int offset,
+        int limit,
+        TaskStatus? status = null,
+        CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var likeParam = $"%{query}%";
+
+        // Count query
+        using var countCmd = connection.CreateCommand();
+        var whereClause = "(Title LIKE @Query OR Description LIKE @Query)";
+        if (status.HasValue)
+            whereClause += " AND Status = @Status";
+
+        countCmd.CommandText = $"SELECT COUNT(*) FROM Tasks WHERE {whereClause}";
+        countCmd.Parameters.AddWithValue("@Query", likeParam);
+        if (status.HasValue)
+            countCmd.Parameters.AddWithValue("@Status", status.Value.ToString());
+
+        var totalCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct));
+
+        // Data query
+        using var dataCmd = connection.CreateCommand();
+        dataCmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE {whereClause} ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        dataCmd.Parameters.AddWithValue("@Query", likeParam);
+        if (status.HasValue)
+            dataCmd.Parameters.AddWithValue("@Status", status.Value.ToString());
+        dataCmd.Parameters.AddWithValue("@Limit", limit);
+        dataCmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await dataCmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+
+        return (results, totalCount);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return Array.Empty<TaskItem>();
+
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        // Build parameterized IN clause
+        var paramNames = new List<string>();
+        for (int i = 0; i < idList.Count; i++)
+        {
+            var paramName = $"@Id{i}";
+            paramNames.Add(paramName);
+            cmd.Parameters.AddWithValue(paramName, idList[i]);
+        }
+
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE Id IN ({string.Join(",", paramNames)})";
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+
+        return results;
+    }
+
     public async Task<int> CreateAsync(TaskItem task, CancellationToken ct = default)
     {
         using var connection = _connectionFactory.CreateConnection();

@@ -190,7 +190,9 @@ public class EscrowManager : IEscrowManager
 
         escrow.Status = EscrowStatus.Settled;
         escrow.SettledAt = DateTime.UtcNow;
-        escrow.PaymentPreimage = Convert.ToHexString(preimage).ToLowerInvariant();
+        // Re-encrypt the preimage before persisting — never store plaintext after settlement
+        var preimageHex = Convert.ToHexString(preimage).ToLowerInvariant();
+        escrow.PaymentPreimage = Security.PreimageProtector.Protect(preimageHex);
 
         await _escrowRepo.UpdateAsync(escrow, ct);
 

@@ -1,14 +1,16 @@
 using LightningAgent.Api.DTOs;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace LightningAgent.Api.Controllers;
 
 /// <summary>
-/// Provides multi-pair pricing and task cost estimation via Chainlink oracles.
+/// Multi-source pricing: Chainlink on-chain oracles + CoinGecko API.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
@@ -19,15 +21,21 @@ public class PricingController : ControllerBase
 {
     private readonly IPriceCacheRepository _priceCacheRepository;
     private readonly IPricingService _pricingService;
+    private readonly ICoinGeckoClient _coinGeckoClient;
+    private readonly CoinGeckoSettings _coinGeckoSettings;
     private readonly ILogger<PricingController> _logger;
 
     public PricingController(
         IPriceCacheRepository priceCacheRepository,
         IPricingService pricingService,
+        ICoinGeckoClient coinGeckoClient,
+        IOptions<CoinGeckoSettings> coinGeckoSettings,
         ILogger<PricingController> logger)
     {
         _priceCacheRepository = priceCacheRepository;
         _pricingService = pricingService;
+        _coinGeckoClient = coinGeckoClient;
+        _coinGeckoSettings = coinGeckoSettings.Value;
         _logger = logger;
     }
 
@@ -43,7 +51,6 @@ public class PricingController : ControllerBase
 
         if (latest is null)
         {
-            // Return a stub price when no cached price exists
             return Ok(new
             {
                 pair = "BTC/USD",
@@ -103,58 +110,106 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Get the latest cached price for any supported pair (BTC/USD, ETH/USD, LINK/USD, LINK/ETH).
+    /// Get all available cached prices (Chainlink + CoinGecko).
+    /// Aliased as /api/pricing/rates for ACP compatibility.
     /// </summary>
+    [HttpGet("all")]
+    [HttpGet("rates")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllPrices(CancellationToken ct)
+    {
+        var allPrices = await _pricingService.GetAllCachedPricesAsync(ct);
+
+        var results = allPrices.Select(p => new
+        {
+            pair = p.Pair,
+            priceUsd = p.PriceUsd,
+            source = p.Source,
+            fetchedAt = p.FetchedAt
+        });
+
+        return Ok(results);
+    }
+
+    /// <summary>
+    /// Get the latest cached price for any supported pair.
+    /// Supports Chainlink pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH)
+    /// and CoinGecko pairs (SOL/USD, AVAX/USD, ADA/USD, DOT/USD, etc.).
+    /// Aliased as /api/pricing/rate/{pair} for ACP compatibility.
+    /// </summary>
+    [HttpGet("rate/{pair}")]
     [HttpGet("{pair}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetPrice(string pair, CancellationToken ct)
     {
-        // Normalize pair format: "ethusd" → "ETH/USD", "eth-usd" → "ETH/USD"
         var normalized = NormalizePair(pair);
         if (normalized is null)
-            return BadRequest(new { detail = $"Unknown price pair '{pair}'. Supported: btcusd, ethusd, linkusd, linketh" });
+            return BadRequest(new { detail = $"Unknown price pair '{pair}'. Use /api/pricing/pairs for supported list." });
 
         var latest = await _priceCacheRepository.GetLatestAsync(normalized, ct);
 
-        if (latest is null)
-        {
-            // Try fetching live
-            try
-            {
-                var price = await _pricingService.GetPriceAsync(normalized, ct);
-                return Ok(new { pair = normalized, priceUsd = price, source = "Chainlink", fetchedAt = DateTime.UtcNow });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch live price for {Pair}", normalized);
-                return Ok(new { pair = normalized, priceUsd = 0.0, source = "none", fetchedAt = DateTime.UtcNow, message = "Price feed not available." });
-            }
-        }
+        if (latest is not null)
+            return Ok(new { pair = latest.Pair, priceUsd = latest.PriceUsd, source = latest.Source, fetchedAt = latest.FetchedAt });
 
-        return Ok(new { pair = latest.Pair, priceUsd = latest.PriceUsd, source = latest.Source, fetchedAt = latest.FetchedAt });
+        // Try fetching live
+        try
+        {
+            var price = await _pricingService.GetPriceAsync(normalized, ct);
+            return Ok(new { pair = normalized, priceUsd = price, source = "live", fetchedAt = DateTime.UtcNow });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch live price for {Pair}", normalized);
+            return Ok(new { pair = normalized, priceUsd = 0.0, source = "none", fetchedAt = DateTime.UtcNow, message = "Price feed not available." });
+        }
     }
 
     /// <summary>
-    /// Get all available cached prices at once.
+    /// List all supported price pairs and their sources.
     /// </summary>
-    [HttpGet("all")]
+    [HttpGet("pairs")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAllPrices(CancellationToken ct)
+    public IActionResult GetSupportedPairs()
     {
-        var pairs = new[] { "BTC/USD", "ETH/USD", "LINK/USD", "LINK/ETH" };
-        var results = new List<object>();
+        var chainlinkPairs = new[] { "BTC/USD", "ETH/USD", "LINK/USD", "LINK/ETH" }
+            .Select(p => new { pair = p, source = "Chainlink" });
 
-        foreach (var pair in pairs)
+        var coinGeckoPairs = _coinGeckoSettings.Enabled
+            ? _coinGeckoClient.GetSupportedPairs()
+                .Select(p => new { pair = p, source = "CoinGecko" })
+            : Enumerable.Empty<object>()
+                .Select(_ => new { pair = "", source = "" });
+
+        // Merge, deduplicating (Chainlink takes priority for pairs that exist in both)
+        var chainlinkSet = new HashSet<string>(chainlinkPairs.Select(p => p.pair), StringComparer.OrdinalIgnoreCase);
+        var merged = chainlinkPairs.Concat(
+            coinGeckoPairs.Where(p => !chainlinkSet.Contains(p.pair)));
+
+        return Ok(new
         {
-            var latest = await _priceCacheRepository.GetLatestAsync(pair, ct);
-            if (latest is not null)
-            {
-                results.Add(new { pair = latest.Pair, priceUsd = latest.PriceUsd, source = latest.Source, fetchedAt = latest.FetchedAt });
-            }
-        }
+            coinGeckoEnabled = _coinGeckoSettings.Enabled,
+            pairs = merged
+        });
+    }
 
-        return Ok(results);
+    /// <summary>
+    /// Force-refresh all CoinGecko prices now.
+    /// </summary>
+    [HttpPost("coingecko/refresh")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RefreshCoinGecko(CancellationToken ct)
+    {
+        if (!_coinGeckoSettings.Enabled)
+            return BadRequest(new { detail = "CoinGecko is not enabled in configuration." });
+
+        var prices = await _pricingService.RefreshCoinGeckoPricesAsync(ct);
+        return Ok(new
+        {
+            refreshed = prices.Count,
+            prices = prices.Select(kv => new { pair = kv.Key, priceUsd = kv.Value })
+        });
     }
 
     private static string? NormalizePair(string input)
@@ -162,10 +217,27 @@ public class PricingController : ControllerBase
         var clean = input.ToUpperInvariant().Replace("-", "").Replace("_", "").Replace("/", "");
         return clean switch
         {
+            // Chainlink pairs
             "BTCUSD" => "BTC/USD",
             "ETHUSD" => "ETH/USD",
             "LINKUSD" => "LINK/USD",
             "LINKETH" => "LINK/ETH",
+            // CoinGecko extended pairs
+            "SOLUSD" => "SOL/USD",
+            "AVAXUSD" => "AVAX/USD",
+            "ADAUSD" => "ADA/USD",
+            "DOTUSD" => "DOT/USD",
+            "UNIUSD" => "UNI/USD",
+            "MATICUSD" => "MATIC/USD",
+            "ARBUSD" => "ARB/USD",
+            "OPUSD" => "OP/USD",
+            "ATOMUSD" => "ATOM/USD",
+            "NEARUSD" => "NEAR/USD",
+            "DOGEUSD" => "DOGE/USD",
+            "XRPUSD" => "XRP/USD",
+            "BNBUSD" => "BNB/USD",
+            "USDCUSD" => "USDC/USD",
+            "USDTUSD" => "USDT/USD",
             _ => null
         };
     }

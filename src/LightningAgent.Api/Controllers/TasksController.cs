@@ -191,6 +191,149 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Search tasks by title or description.
+    /// </summary>
+    [HttpGet("search")]
+    [ProducesResponseType(typeof(PaginatedResponse<TaskDetailResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PaginatedResponse<TaskDetailResponse>>> SearchTasks(
+        [FromQuery] string q,
+        [FromQuery] string? status = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+            return Ok(new PaginatedResponse<TaskDetailResponse> { Page = page, PageSize = pageSize });
+
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        TaskStatus? statusFilter = null;
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<TaskStatus>(status, ignoreCase: true, out var parsed))
+            statusFilter = parsed;
+
+        var offset = (page - 1) * pageSize;
+        var (tasks, totalCount) = await _taskRepository.SearchAsync(q, offset, pageSize, statusFilter, ct);
+        var items = tasks.Select(MapToDetailResponse).ToList();
+
+        int? nextCursor = items.Count == pageSize && items.Count > 0 ? items[^1].Id : null;
+
+        return Ok(new PaginatedResponse<TaskDetailResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            NextCursor = nextCursor
+        });
+    }
+
+    /// <summary>
+    /// Create multiple tasks in a single request. Returns the created task IDs.
+    /// </summary>
+    [HttpPost("batch")]
+    [ProducesResponseType(typeof(BatchCreateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BatchCreateResponse>> BatchCreateTasks(
+        [FromBody] List<CreateTaskRequest> requests,
+        CancellationToken ct)
+    {
+        if (requests is null || requests.Count == 0)
+            return BadRequest(ApiError.BadRequest("At least one task is required."));
+        if (requests.Count > 50)
+            return BadRequest(ApiError.BadRequest("Maximum 50 tasks per batch request."));
+
+        var results = new List<BatchCreateResult>();
+
+        foreach (var request in requests)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Description))
+                {
+                    results.Add(new BatchCreateResult { Success = false, Error = "Title and Description are required." });
+                    continue;
+                }
+
+                if (!Enum.TryParse<TaskType>(request.TaskType, ignoreCase: true, out var taskType))
+                {
+                    results.Add(new BatchCreateResult { Success = false, Error = $"Invalid TaskType '{request.TaskType}'." });
+                    continue;
+                }
+
+                if (request.MaxPayoutSats <= 0)
+                {
+                    results.Add(new BatchCreateResult { Success = false, Error = "MaxPayoutSats must be greater than zero." });
+                    continue;
+                }
+
+                var externalId = Guid.NewGuid().ToString("N");
+                var now = DateTime.UtcNow;
+
+                var task = new TaskItem
+                {
+                    ExternalId = externalId,
+                    ClientId = request.ClientId ?? "anonymous",
+                    Title = request.Title,
+                    Description = request.Description,
+                    TaskType = taskType,
+                    Status = TaskStatus.Pending,
+                    VerificationCriteria = request.VerificationCriteria,
+                    MaxPayoutSats = request.MaxPayoutSats,
+                    Priority = request.Priority ?? 0,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+
+                var id = await _taskRepository.CreateAsync(task, ct);
+                _metrics.IncrementTasksCreated();
+
+                results.Add(new BatchCreateResult
+                {
+                    Success = true,
+                    TaskId = id,
+                    ExternalId = externalId
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Batch task creation failed for item");
+                results.Add(new BatchCreateResult { Success = false, Error = ex.Message });
+            }
+        }
+
+        return Ok(new BatchCreateResponse
+        {
+            Total = results.Count,
+            Succeeded = results.Count(r => r.Success),
+            Failed = results.Count(r => !r.Success),
+            Results = results
+        });
+    }
+
+    /// <summary>
+    /// Get the status of multiple tasks by their IDs.
+    /// </summary>
+    [HttpPost("batch/status")]
+    [ProducesResponseType(typeof(List<TaskDetailResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<TaskDetailResponse>>> BatchGetStatus(
+        [FromBody] List<int> taskIds,
+        CancellationToken ct)
+    {
+        if (taskIds is null || taskIds.Count == 0)
+            return BadRequest(ApiError.BadRequest("At least one task ID is required."));
+        if (taskIds.Count > 100)
+            return BadRequest(ApiError.BadRequest("Maximum 100 task IDs per request."));
+
+        var tasks = await _taskRepository.GetByIdsAsync(taskIds, ct);
+        var items = tasks.Select(MapToDetailResponse).ToList();
+
+        return Ok(items);
+    }
+
+    /// <summary>
     /// Get a single task by ID, including its milestones.
     /// </summary>
     [HttpGet("{id:int}")]

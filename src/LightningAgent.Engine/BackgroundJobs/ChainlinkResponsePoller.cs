@@ -71,15 +71,76 @@ public class ChainlinkResponsePoller : BackgroundService
                         if (retryCount > MaxRetriesPerVerification)
                         {
                             _logger.LogWarning(
-                                "Verification {Id} (requestId={RequestId}) exceeded max retries ({MaxRetries}). Marking as timed out.",
+                                "Verification {Id} (requestId={RequestId}) exceeded max retries ({MaxRetries}). " +
+                                "Falling back to local AI judge verification then cancelling escrow.",
                                 verification.Id, verification.ChainlinkRequestId, MaxRetriesPerVerification);
 
-                            verification.Score = 0.0;
-                            verification.Passed = false;
-                            verification.Details = "Chainlink Functions response timed out";
-                            verification.CompletedAt = DateTime.UtcNow;
+                            // Attempt local AI judge fallback before marking as failed
+                            try
+                            {
+                                var milestoneRepo = scope.ServiceProvider.GetRequiredService<IMilestoneRepository>();
+                                var aiJudge = scope.ServiceProvider.GetRequiredService<LightningAgent.AI.Judge.AiJudgeAgent>();
 
+                                var milestone = await milestoneRepo.GetByIdAsync(verification.MilestoneId, stoppingToken);
+                                if (milestone?.OutputData is not null)
+                                {
+                                    var output = System.Text.Encoding.UTF8.GetString(
+                                        Convert.FromBase64String(milestone.OutputData));
+                                    var judgeResult = await aiJudge.JudgeOutputAsync(
+                                        milestone.Description ?? milestone.Title,
+                                        milestone.VerificationCriteria ?? milestone.Description ?? milestone.Title,
+                                        output, stoppingToken);
+
+                                    verification.Score = judgeResult.Score;
+                                    verification.Passed = judgeResult.Passed;
+                                    verification.Details = $"Chainlink timeout — AI judge fallback: {judgeResult.Reasoning}";
+
+                                    _logger.LogInformation(
+                                        "Verification {Id} resolved via AI judge fallback: passed={Passed}, score={Score:F2}",
+                                        verification.Id, verification.Passed, verification.Score);
+                                }
+                                else
+                                {
+                                    verification.Score = 0.0;
+                                    verification.Passed = false;
+                                    verification.Details = "Chainlink Functions timed out, no output for AI judge fallback";
+                                }
+                            }
+                            catch (Exception fallbackEx)
+                            {
+                                _logger.LogWarning(fallbackEx,
+                                    "AI judge fallback also failed for verification {Id}", verification.Id);
+                                verification.Score = 0.0;
+                                verification.Passed = false;
+                                verification.Details = "Chainlink Functions timed out; AI judge fallback failed";
+                            }
+
+                            verification.CompletedAt = DateTime.UtcNow;
                             await verificationRepo.UpdateAsync(verification, stoppingToken);
+
+                            // Auto-cancel the stuck escrow if verification failed
+                            if (!verification.Passed)
+                            {
+                                try
+                                {
+                                    var escrowRepo = scope.ServiceProvider.GetRequiredService<IEscrowRepository>();
+                                    var escrowManager = scope.ServiceProvider.GetRequiredService<IEscrowManager>();
+                                    var escrow = await escrowRepo.GetByMilestoneIdAsync(verification.MilestoneId, stoppingToken);
+                                    if (escrow is not null && escrow.Status == Core.Enums.EscrowStatus.Held)
+                                    {
+                                        await escrowManager.CancelEscrowAsync(escrow.Id, stoppingToken);
+                                        _logger.LogInformation(
+                                            "Auto-cancelled stuck escrow {EscrowId} for timed-out verification {VerificationId}",
+                                            escrow.Id, verification.Id);
+                                    }
+                                }
+                                catch (Exception escrowEx)
+                                {
+                                    _logger.LogWarning(escrowEx,
+                                        "Failed to auto-cancel escrow for timed-out verification {Id}", verification.Id);
+                                }
+                            }
+
                             _retryCounters.TryRemove(verification.Id, out _);
                             continue;
                         }

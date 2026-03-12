@@ -170,8 +170,8 @@ public class PaymentService : IPaymentService
             else
             {
                 _logger.LogInformation(
-                    "Payment {PaymentId} of {AmountSats} sats settled for agent {AgentId} (pubkey={Pubkey})",
-                    payment.Id, amountSats, agentId, agent.WalletPubkey[..16] + "...");
+                    "Payment {PaymentId} of {AmountSats} sats settled for agent {AgentId}",
+                    payment.Id, amountSats, agentId);
             }
         }
         catch (Exception ex)

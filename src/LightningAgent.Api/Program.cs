@@ -72,6 +72,7 @@ if (escrowSettings is not null && !string.IsNullOrWhiteSpace(escrowSettings.Encr
 }
 
 builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pricing"));
+builder.Services.Configure<CoinGeckoSettings>(builder.Configuration.GetSection("CoinGecko"));
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
@@ -115,6 +116,8 @@ builder.Services.PostConfigure<LightningSettings>(settings =>
 });
 
 // ── Lightning Network ─────────────────────────────────────────────
+// Only allow insecure TLS in development — production requires a real cert
+LightningAgent.Lightning.LndTlsCertHandler.AllowInsecureDevelopmentMode = builder.Environment.IsDevelopment();
 builder.Services.AddLightningServices(builder.Configuration);
 
 // ── Chainlink ─────────────────────────────────────────────────────
@@ -200,6 +203,9 @@ builder.Services.AddHttpClient<WebhookDeliveryService>();
 // ── SignalR Event Publishing ──────────────────────────────────
 builder.Services.AddScoped<IEventPublisher, SignalREventPublisher>();
 
+// ── CoinGecko Price Feeds ─────────────────────────────────────────
+builder.Services.AddHttpClient<ICoinGeckoClient, LightningAgent.Engine.Services.CoinGeckoClient>();
+
 // ── Engine Services ───────────────────────────────────────────────
 builder.Services.AddScoped<IEscrowManager, EscrowManager>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
@@ -226,6 +232,8 @@ builder.Services.AddHostedService<EscrowRetryService>();
 builder.Services.AddHostedService<InvoiceStatusPoller>();
 builder.Services.AddHostedService<SecretRotationService>();
 builder.Services.AddHostedService<DataCleanupService>();
+builder.Services.AddHostedService<StaleTaskReassigner>();
+builder.Services.AddHostedService<AutomatedBackupService>();
 builder.Services.AddHostedService<CcipMessagePoller>();
 builder.Services.AddScoped<CcipBridgeService>();
 

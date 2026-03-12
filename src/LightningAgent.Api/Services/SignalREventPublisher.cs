@@ -26,6 +26,41 @@ public class SignalREventPublisher : IEventPublisher
         _logger = logger;
     }
 
+    public async Task PublishTaskStatusChangedAsync(int taskId, string previousStatus, string newStatus, int? agentId = null, CancellationToken ct = default)
+    {
+        var evt = new Core.Events.TaskStatusChangedEvent(taskId, previousStatus, newStatus, agentId, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing TaskStatusChanged event: Task {TaskId} {Previous} -> {New}",
+            taskId, previousStatus, newStatus);
+
+        await _hub.Clients.All.SendAsync("TaskStatusChanged", evt, ct);
+        await _hub.Clients.Group($"task-{taskId}").SendAsync("TaskStatusChanged", evt, ct);
+        if (agentId.HasValue)
+        {
+            await _hub.Clients.Group($"agent-{agentId}").SendAsync("TaskStatusChanged", evt, ct);
+        }
+    }
+
+    public async Task PublishEscrowCreatedAsync(int escrowId, int milestoneId, long amountSats, CancellationToken ct = default)
+    {
+        var evt = new Core.Events.EscrowCreatedEvent(escrowId, milestoneId, amountSats, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing EscrowCreated event: Escrow {EscrowId} Milestone {MilestoneId} Amount {AmountSats} sats",
+            escrowId, milestoneId, amountSats);
+
+        await _hub.Clients.All.SendAsync("EscrowCreated", evt, ct);
+    }
+
+    public async Task PublishEscrowCancelledAsync(int escrowId, int milestoneId, long amountSats, string reason, CancellationToken ct = default)
+    {
+        var evt = new Core.Events.EscrowCancelledEvent(escrowId, milestoneId, amountSats, reason, DateTime.UtcNow);
+        _logger.LogInformation(
+            "Publishing EscrowCancelled event: Escrow {EscrowId} Milestone {MilestoneId} Reason: {Reason}",
+            escrowId, milestoneId, reason);
+
+        await _hub.Clients.All.SendAsync("EscrowCancelled", evt, ct);
+    }
+
     public async Task PublishTaskAssignedAsync(int taskId, int agentId, CancellationToken ct = default)
     {
         var evt = new TaskAssignedEvent(taskId, agentId, DateTime.UtcNow);

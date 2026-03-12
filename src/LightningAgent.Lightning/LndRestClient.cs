@@ -76,13 +76,15 @@ public sealed class LndRestClient : ILightningClient
 
         try
         {
-            _logger.LogDebug("Settling invoice with preimage={Preimage}", hexPreimage);
+            _logger.LogDebug("Settling invoice (preimage hash={PreimageHash})",
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(paymentPreimage))[..16].ToLowerInvariant());
             await PostAsync<JsonElement>("/v2/invoices/settle", request, ct);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to settle invoice with preimage={Preimage}", hexPreimage);
+            _logger.LogError(ex, "Failed to settle invoice (preimage hash={PreimageHash})",
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(paymentPreimage))[..16].ToLowerInvariant());
             return false;
         }
     }

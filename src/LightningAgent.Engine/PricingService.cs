@@ -11,8 +11,10 @@ namespace LightningAgent.Engine;
 public class PricingService : IPricingService
 {
     private readonly IChainlinkPriceFeedClient _priceFeed;
+    private readonly ICoinGeckoClient _coinGecko;
     private readonly IPriceCacheRepository _priceCache;
     private readonly ChainlinkSettings _chainlinkSettings;
+    private readonly CoinGeckoSettings _coinGeckoSettings;
     private readonly PricingSettings _pricingSettings;
     private readonly ILogger<PricingService> _logger;
 
@@ -23,14 +25,18 @@ public class PricingService : IPricingService
 
     public PricingService(
         IChainlinkPriceFeedClient priceFeed,
+        ICoinGeckoClient coinGecko,
         IPriceCacheRepository priceCache,
         IOptions<ChainlinkSettings> chainlinkSettings,
+        IOptions<CoinGeckoSettings> coinGeckoSettings,
         IOptions<PricingSettings> pricingSettings,
         ILogger<PricingService> logger)
     {
         _priceFeed = priceFeed;
+        _coinGecko = coinGecko;
         _priceCache = priceCache;
         _chainlinkSettings = chainlinkSettings.Value;
+        _coinGeckoSettings = coinGeckoSettings.Value;
         _pricingSettings = pricingSettings.Value;
         _logger = logger;
     }
@@ -49,16 +55,28 @@ public class PricingService : IPricingService
 
     public Task<double> GetPriceAsync(string pair, CancellationToken ct = default)
     {
-        var feedAddress = pair.ToUpperInvariant() switch
+        var normalized = pair.ToUpperInvariant();
+
+        // Check if it's a Chainlink-supported pair first
+        var feedAddress = normalized switch
         {
             "BTC/USD" => _chainlinkSettings.BtcUsdPriceFeedAddress,
             "ETH/USD" => _chainlinkSettings.EthUsdPriceFeedAddress,
             "LINK/USD" => _chainlinkSettings.LinkUsdPriceFeedAddress,
             "LINK/ETH" => _chainlinkSettings.LinkEthPriceFeedAddress,
-            _ => throw new ArgumentException($"Unknown price pair: {pair}. Supported: BTC/USD, ETH/USD, LINK/USD, LINK/ETH")
+            _ => null
         };
 
-        return FetchPriceAsync(pair.ToUpperInvariant(), feedAddress, ct);
+        if (!string.IsNullOrWhiteSpace(feedAddress))
+            return FetchPriceAsync(normalized, feedAddress, ct);
+
+        // Fall back to CoinGecko for extended pairs
+        if (_coinGeckoSettings.Enabled)
+            return FetchCoinGeckoPriceAsync(normalized, ct);
+
+        throw new ArgumentException(
+            $"Unknown price pair: {pair}. Chainlink supports: BTC/USD, ETH/USD, LINK/USD, LINK/ETH. " +
+            "Enable CoinGecko for additional pairs.");
     }
 
     /// <summary>
@@ -67,8 +85,14 @@ public class PricingService : IPricingService
     private async Task<double> FetchPriceAsync(string pair, string feedAddress, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(feedAddress))
+        {
+            // If Chainlink address is not configured, try CoinGecko fallback
+            if (_coinGeckoSettings.Enabled)
+                return await FetchCoinGeckoPriceAsync(pair, ct);
+
             throw new InvalidOperationException(
                 $"Price feed address for {pair} is not configured in Chainlink settings.");
+        }
 
         // 1. Try cache
         var cached = await _priceCache.GetLatestAsync(pair, ct);
@@ -83,25 +107,109 @@ public class PricingService : IPricingService
         // 2. Fetch from Chainlink
         _logger.LogInformation("Fetching fresh {Pair} price from Chainlink oracle", pair);
 
-        var feedData = await _priceFeed.GetLatestPriceAsync(feedAddress, ct);
-        double price = (double)feedData.Answer;
+        try
+        {
+            var feedData = await _priceFeed.GetLatestPriceAsync(feedAddress, ct);
+            double price = (double)feedData.Answer;
 
-        _logger.LogInformation(
-            "Chainlink {Pair} price: ${Price:F8} (roundId={RoundId})",
-            pair, price, feedData.RoundId);
+            _logger.LogInformation(
+                "Chainlink {Pair} price: ${Price:F8} (roundId={RoundId})",
+                pair, price, feedData.RoundId);
 
-        // 3. Cache
+            // 3. Cache
+            var quote = new PriceQuote
+            {
+                Pair = pair,
+                PriceUsd = price,
+                Source = "Chainlink",
+                FetchedAt = DateTime.UtcNow
+            };
+
+            await _priceCache.CreateAsync(quote, ct);
+            return price;
+        }
+        catch (Exception ex) when (_coinGeckoSettings.Enabled)
+        {
+            // Chainlink failed — fall back to CoinGecko
+            _logger.LogWarning(ex, "Chainlink fetch failed for {Pair}, falling back to CoinGecko", pair);
+            return await FetchCoinGeckoPriceAsync(pair, ct);
+        }
+    }
+
+    /// <summary>
+    /// Fetches a single price from CoinGecko (or cache).
+    /// </summary>
+    private async Task<double> FetchCoinGeckoPriceAsync(string pair, CancellationToken ct)
+    {
+        // 1. Try cache first
+        var cached = await _priceCache.GetLatestAsync(pair, ct);
+        if (cached is not null && cached.FetchedAt > DateTime.UtcNow.AddMinutes(-CacheTtlMinutes))
+        {
+            _logger.LogDebug("Using cached CoinGecko {Pair} price: ${Price:F4}", pair, cached.PriceUsd);
+            return cached.PriceUsd;
+        }
+
+        // 2. Resolve CoinGecko coin ID from pair
+        var coinId = Services.CoinGeckoClient.ResolveCoinId(pair);
+        if (coinId is null)
+            throw new ArgumentException($"Unknown price pair: {pair}. Not mapped to a CoinGecko coin ID.");
+
+        // 3. Fetch from CoinGecko
+        var price = await _coinGecko.GetPriceAsync(coinId, ct);
+        if (price is null)
+            throw new InvalidOperationException($"CoinGecko returned no data for {pair} (coinId={coinId}).");
+
+        // 4. Cache
         var quote = new PriceQuote
         {
             Pair = pair,
-            PriceUsd = price,
-            Source = "Chainlink",
+            PriceUsd = price.PriceUsd,
+            Source = "CoinGecko",
             FetchedAt = DateTime.UtcNow
         };
-
         await _priceCache.CreateAsync(quote, ct);
 
-        return price;
+        return price.PriceUsd;
+    }
+
+    /// <summary>
+    /// Bulk-refreshes all CoinGecko prices and caches them.
+    /// </summary>
+    public async Task<Dictionary<string, double>> RefreshCoinGeckoPricesAsync(CancellationToken ct = default)
+    {
+        if (!_coinGeckoSettings.Enabled)
+        {
+            _logger.LogDebug("CoinGecko is disabled, skipping refresh");
+            return new Dictionary<string, double>();
+        }
+
+        var prices = await _coinGecko.GetAllPricesAsync(ct);
+        var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (pair, cgPrice) in prices)
+        {
+            var quote = new PriceQuote
+            {
+                Pair = pair,
+                PriceUsd = cgPrice.PriceUsd,
+                Source = "CoinGecko",
+                FetchedAt = DateTime.UtcNow
+            };
+
+            await _priceCache.CreateAsync(quote, ct);
+            result[pair] = cgPrice.PriceUsd;
+        }
+
+        _logger.LogInformation("Cached {Count} CoinGecko prices", result.Count);
+        return result;
+    }
+
+    /// <summary>
+    /// Returns all cached prices from both sources.
+    /// </summary>
+    public async Task<IReadOnlyList<PriceQuote>> GetAllCachedPricesAsync(CancellationToken ct = default)
+    {
+        return await _priceCache.GetAllLatestAsync(ct);
     }
 
     public async Task<long> CalculatePriceSatsAsync(double usdAmount, CancellationToken ct = default)

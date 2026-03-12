@@ -31,10 +31,8 @@ public static class ServiceCollectionExtensions
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(5);
         });
 
-        // Register ClaudeApiClient as the primary IClaudeAiClient
-        services.AddScoped<IClaudeAiClient>(sp => sp.GetRequiredService<ClaudeApiClient>());
-
-        // MultiModelClient (secondary) — uses OpenRouter with ClaudeApiClient as fallback
+        // MultiModelClient is the primary IClaudeAiClient — tries OpenRouter first,
+        // falls back to ClaudeApiClient when OpenRouter is unavailable or not configured
         services.AddHttpClient<MultiModelClient>(client =>
         {
             client.Timeout = TimeSpan.FromMinutes(2);
@@ -45,6 +43,8 @@ public static class ServiceCollectionExtensions
             options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(5);
         });
+
+        services.AddScoped<IClaudeAiClient>(sp => sp.GetRequiredService<MultiModelClient>());
 
         services.AddScoped<INaturalLanguageTaskParser, NaturalLanguageTaskParser>();
         services.AddScoped<AiJudgeAgent>();

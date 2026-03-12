@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<ILightningClient, LndRestClient>(client =>
         {
             client.BaseAddress = new Uri(settings.LndRestUrl);
+            client.Timeout = TimeSpan.FromSeconds(90); // Fix #6: explicit global timeout
         })
         .ConfigurePrimaryHttpMessageHandler(() => LndTlsCertHandler.CreateHttpClientHandler(settings.TlsCertPath))
         .AddHttpMessageHandler<LndMacaroonHandler>()

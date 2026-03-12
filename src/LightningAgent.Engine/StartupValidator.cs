@@ -89,6 +89,9 @@ public static class StartupValidator
             return;
         }
 
+        var devMode = string.Equals(
+            configuration["ApiSecurity:DevMode"], "true", StringComparison.OrdinalIgnoreCase);
+
         try
         {
             using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -126,16 +129,34 @@ public static class StartupValidator
 
                     if (networkSettings.IsTest && !isTestnet)
                     {
+                        var message =
+                            $"NETWORK MISMATCH: Network:IsTest is true but connected to MAINNET chain {chainId} ({networkName}). " +
+                            "Set Network:IsTest to false or change Chainlink:EthereumRpcUrl to a testnet RPC.";
+
+                        if (!devMode)
+                        {
+                            logger.LogError(message);
+                            throw new InvalidOperationException(message);
+                        }
+
                         logger.LogError(
-                            "NETWORK MISMATCH: Network:IsTest is true but connected to MAINNET chain {ChainId} ({NetworkName}). " +
-                            "Set Network:IsTest to false or change Chainlink:EthereumRpcUrl to a testnet RPC.",
+                            "NETWORK MISMATCH (DevMode, continuing): Network:IsTest is true but connected to MAINNET chain {ChainId} ({NetworkName}).",
                             chainId, networkName);
                     }
                     else if (!networkSettings.IsTest && isTestnet)
                     {
+                        var message =
+                            $"NETWORK MISMATCH: Network:IsTest is false but connected to testnet chain {chainId} ({networkName}). " +
+                            "Set Network:IsTest to true or change Chainlink:EthereumRpcUrl to a mainnet RPC.";
+
+                        if (!devMode)
+                        {
+                            logger.LogError(message);
+                            throw new InvalidOperationException(message);
+                        }
+
                         logger.LogWarning(
-                            "Network:IsTest is false but connected to testnet chain {ChainId} ({NetworkName}). " +
-                            "Set Network:IsTest to true or change Chainlink:EthereumRpcUrl to a mainnet RPC.",
+                            "NETWORK MISMATCH (DevMode, continuing): Network:IsTest is false but connected to testnet chain {ChainId} ({NetworkName}).",
                             chainId, networkName);
                     }
                 }

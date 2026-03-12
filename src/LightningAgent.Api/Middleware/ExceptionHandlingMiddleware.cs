@@ -1,3 +1,5 @@
+using LightningAgent.Api.DTOs;
+
 namespace LightningAgent.Api.Middleware;
 
 public class ExceptionHandlingMiddleware
@@ -21,25 +23,56 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception occurred");
-            context.Response.StatusCode = 500;
-            context.Response.ContentType = "application/problem+json";
+            var correlationId = context.Items.TryGetValue("CorrelationId", out var cid)
+                ? cid?.ToString()
+                : context.TraceIdentifier;
 
-            // Always return generic error to client - never leak exception details
-            var detail = "An internal error occurred. Please try again later.";
-            // Correlation ID helps support staff find the detailed logs
-            var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid?.ToString() : context.TraceIdentifier;
-
-            var problem = new
+            var error = ex switch
             {
-                type = "https://tools.ietf.org/html/rfc7231#section-6.6.1",
-                title = "Internal Server Error",
-                status = 500,
-                detail,
-                correlationId,
-                traceId = context.TraceIdentifier
+                InvalidOperationException ioe => CreateError(400, "Bad Request", ioe.Message, correlationId, context),
+                ArgumentException ae => CreateError(400, "Bad Request", ae.Message, correlationId, context),
+                KeyNotFoundException knf => CreateError(404, "Not Found", knf.Message, correlationId, context),
+                UnauthorizedAccessException => CreateError(403, "Forbidden", "Access denied.", correlationId, context),
+                OperationCanceledException => CreateError(499, "Client Closed Request", "The request was cancelled.", correlationId, context),
+                _ => CreateError(500, "Internal Server Error", "An internal error occurred. Please try again later.", correlationId, context)
             };
-            await context.Response.WriteAsJsonAsync(problem);
+
+            if (error.Status >= 500)
+            {
+                _logger.LogError(ex, "Unhandled exception occurred (correlationId={CorrelationId})", correlationId);
+            }
+            else
+            {
+                _logger.LogWarning(ex, "Request error {Status} (correlationId={CorrelationId}): {Detail}",
+                    error.Status, correlationId, error.Detail);
+            }
+
+            context.Response.StatusCode = error.Status;
+            context.Response.ContentType = "application/problem+json";
+            await context.Response.WriteAsJsonAsync(error);
         }
+    }
+
+    private static ApiError CreateError(int status, string title, string detail, string? correlationId, HttpContext context)
+    {
+        var typeUrl = status switch
+        {
+            400 => "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+            403 => "https://tools.ietf.org/html/rfc7231#section-6.5.3",
+            404 => "https://tools.ietf.org/html/rfc7231#section-6.5.4",
+            409 => "https://tools.ietf.org/html/rfc7231#section-6.5.8",
+            429 => "https://tools.ietf.org/html/rfc6585#section-4",
+            _ => "https://tools.ietf.org/html/rfc7231#section-6.6.1"
+        };
+
+        return new ApiError
+        {
+            Type = typeUrl,
+            Title = title,
+            Status = status,
+            Detail = status >= 500 ? "An internal error occurred. Please try again later." : detail,
+            CorrelationId = correlationId,
+            TraceId = context.TraceIdentifier
+        };
     }
 }

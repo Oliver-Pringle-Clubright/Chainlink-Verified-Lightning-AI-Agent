@@ -53,8 +53,12 @@
             gap: 10px;
         }
 
-        .header h1 .lightning {
-            color: var(--yellow);
+        .header h1 .lightning { color: var(--yellow); }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
         .connection-status {
@@ -76,6 +80,39 @@
             background: var(--green);
             box-shadow: 0 0 6px var(--green);
         }
+
+        /* ── Navigation Tabs ──────────────────────────────────────── */
+        .nav-tabs {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 0;
+            padding: 0 24px;
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            font-family: inherit;
+        }
+
+        .nav-tab:hover { color: var(--text); }
+        .nav-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
         .container {
             max-width: 1400px;
@@ -164,13 +201,8 @@
             border-bottom: 1px solid var(--border);
         }
 
-        tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        tbody tr:hover {
-            background: var(--accent-glow);
-        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: var(--accent-glow); }
 
         .badge {
             display: inline-block;
@@ -183,9 +215,7 @@
         }
 
         .badge-pending { background: var(--yellow-bg); color: var(--yellow); }
-        .badge-assigned,
-        .badge-inprogress,
-        .badge-verifying { background: var(--blue-bg); color: var(--blue); }
+        .badge-assigned, .badge-inprogress, .badge-verifying { background: var(--blue-bg); color: var(--blue); }
         .badge-completed { background: var(--green-bg); color: var(--green); }
         .badge-failed { background: var(--red-bg); color: var(--red); }
         .badge-disputed { background: var(--orange-bg); color: var(--orange); }
@@ -196,6 +226,8 @@
         .badge-settled { background: var(--green-bg); color: var(--green); }
         .badge-cancelled { background: var(--red-bg); color: var(--red); }
         .badge-expired { background: var(--yellow-bg); color: var(--yellow); }
+        .badge-inflight { background: var(--blue-bg); color: var(--blue); }
+        .badge-streaming, .badge-escrow, .badge-direct { background: var(--accent-glow); color: var(--accent); }
 
         .score-bar {
             width: 60px;
@@ -221,9 +253,7 @@
             font-size: 13px;
         }
 
-        .sats {
-            font-variant-numeric: tabular-nums;
-        }
+        .sats { font-variant-numeric: tabular-nums; }
 
         .refresh-time {
             font-size: 12px;
@@ -246,21 +276,9 @@
             gap: 10px;
         }
 
-        .event-log .event-time {
-            color: var(--text-dim);
-            white-space: nowrap;
-            min-width: 70px;
-        }
-
-        .event-log .event-type {
-            color: var(--accent);
-            font-weight: 600;
-            min-width: 140px;
-        }
-
-        .event-log .event-detail {
-            color: var(--text);
-        }
+        .event-log .event-time { color: var(--text-dim); white-space: nowrap; min-width: 70px; }
+        .event-log .event-type { color: var(--accent); font-weight: 600; min-width: 160px; }
+        .event-log .event-detail { color: var(--text); }
 
         .timeline-chart {
             display: flex;
@@ -279,9 +297,7 @@
             position: relative;
         }
 
-        .timeline-bar:hover {
-            background: #818cf8;
-        }
+        .timeline-bar:hover { background: #818cf8; }
 
         .timeline-bar .tooltip {
             display: none;
@@ -298,119 +314,411 @@
             z-index: 10;
         }
 
-        .timeline-bar:hover .tooltip {
+        .timeline-bar:hover .tooltip { display: block; }
+
+        /* ── Forms ────────────────────────────────────────────────── */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
             display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            border-color: var(--accent);
+        }
+
+        .form-group textarea { resize: vertical; min-height: 80px; }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .form-row { grid-template-columns: 1fr; }
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover { background: #5558e6; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover { background: var(--border); }
+
+        .form-feedback {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .form-feedback.success {
+            display: block;
+            background: var(--green-bg);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .form-feedback.error {
+            display: block;
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* ── Search Bar ───────────────────────────────────────────── */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .search-bar input:focus { border-color: var(--accent); }
+
+        .search-bar select {
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .clickable { cursor: pointer; }
+        .clickable:hover { text-decoration: underline; color: var(--accent); }
+
+        /* ── Task Detail Panel ────────────────────────────────────── */
+        .detail-panel {
+            display: none;
+            margin-top: 16px;
+        }
+
+        .detail-panel.open { display: block; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 8px 16px;
+            font-size: 13px;
+        }
+
+        .detail-grid .detail-label {
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        .milestone-list {
+            margin-top: 12px;
+        }
+
+        .milestone-item {
+            padding: 8px 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
     <div class="header">
         <h1><span class="lightning">&#9889;</span> Lightning Agent Dashboard</h1>
-        <div class="connection-status">
-            <div class="status-dot" id="connectionDot"></div>
-            <span id="connectionText">Connecting...</span>
+        <div class="header-right">
+            <div class="connection-status">
+                <div class="status-dot" id="connectionDot"></div>
+                <span id="connectionText">Connecting...</span>
+            </div>
         </div>
     </div>
 
-    <div class="container">
-        <!-- Summary Cards -->
-        <div class="grid" id="summaryGrid">
-            <div class="card stat-card">
-                <span class="label">Total Tasks</span>
-                <span class="value" id="totalTasks">--</span>
-            </div>
-            <div class="card stat-card">
-                <span class="label">In Progress</span>
-                <span class="value" id="inProgressTasks" style="color: var(--blue)">--</span>
-            </div>
-            <div class="card stat-card">
-                <span class="label">Completed</span>
-                <span class="value" id="completedTasks" style="color: var(--green)">--</span>
-            </div>
-            <div class="card stat-card">
-                <span class="label">Failed</span>
-                <span class="value" id="failedTasks" style="color: var(--red)">--</span>
-            </div>
-            <div class="card stat-card">
-                <span class="label">Escrow Held</span>
-                <span class="value sats" id="escrowHeld">--</span>
-                <span class="sub">sats locked</span>
-            </div>
-            <div class="card stat-card">
-                <span class="label">Total Spent</span>
-                <span class="value sats" id="totalSpent">--</span>
-                <span class="sub">sats</span>
-            </div>
-        </div>
+    <!-- Navigation -->
+    <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="overview">Overview</button>
+        <button class="nav-tab" data-tab="tasks">Tasks</button>
+        <button class="nav-tab" data-tab="create">Create Task</button>
+        <button class="nav-tab" data-tab="payments">Payments</button>
+        <button class="nav-tab" data-tab="events">Live Events</button>
+    </div>
 
-        <!-- Timeline Chart -->
-        <div class="card" style="margin-bottom: 24px;">
-            <h2>Task Activity (30 days)</h2>
-            <div class="timeline-chart" id="timelineChart">
-                <div class="empty-state">Loading timeline...</div>
-            </div>
-        </div>
-
-        <!-- Two Column Layout -->
-        <div class="two-col">
-            <!-- Recent Tasks -->
-            <div class="card">
-                <h2>Recent Tasks</h2>
-                <div style="overflow-x: auto;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Title</th>
-                                <th>Status</th>
-                                <th>Payout</th>
-                                <th>Created</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tasksTableBody">
-                            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
-                        </tbody>
-                    </table>
+    <!-- ═══ OVERVIEW TAB ═══════════════════════════════════════════ -->
+    <div class="tab-content active" id="tab-overview">
+        <div class="container">
+            <div class="grid" id="summaryGrid">
+                <div class="card stat-card">
+                    <span class="label">Total Tasks</span>
+                    <span class="value" id="totalTasks">--</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">In Progress</span>
+                    <span class="value" id="inProgressTasks" style="color: var(--blue)">--</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Completed</span>
+                    <span class="value" id="completedTasks" style="color: var(--green)">--</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Failed</span>
+                    <span class="value" id="failedTasks" style="color: var(--red)">--</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Escrow Held</span>
+                    <span class="value sats" id="escrowHeld">--</span>
+                    <span class="sub">sats locked</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="label">Total Spent</span>
+                    <span class="value sats" id="totalSpent">--</span>
+                    <span class="sub">sats</span>
                 </div>
             </div>
 
-            <!-- Agents -->
+            <div class="card" style="margin-bottom: 24px;">
+                <h2>Task Activity (30 days)</h2>
+                <div class="timeline-chart" id="timelineChart">
+                    <div class="empty-state">Loading timeline...</div>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="card">
+                    <h2>Recent Tasks</h2>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Payout</th><th>Created</th></tr></thead>
+                            <tbody id="tasksTableBody">
+                                <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>Agents</h2>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead><tr><th>Name</th><th>Status</th><th>Reputation</th><th>Tasks</th><th>Earned</th></tr></thead>
+                            <tbody id="agentsTableBody">
+                                <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="refresh-time">Last refreshed: <span id="lastRefresh">--</span></div>
+        </div>
+    </div>
+
+    <!-- ═══ TASKS TAB (Search + Browse) ════════════════════════════ -->
+    <div class="tab-content" id="tab-tasks">
+        <div class="container">
             <div class="card">
-                <h2>Agents</h2>
+                <h2>Search & Browse Tasks</h2>
+                <div class="search-bar">
+                    <input type="text" id="taskSearchInput" placeholder="Search by title or description..." />
+                    <select id="taskSearchStatus">
+                        <option value="">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="InProgress">In Progress</option>
+                        <option value="Verifying">Verifying</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Failed">Failed</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="searchTasks()">Search</button>
+                </div>
                 <div style="overflow-x: auto;">
                     <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Status</th>
-                                <th>Reputation</th>
-                                <th>Tasks</th>
-                                <th>Earned</th>
-                            </tr>
-                        </thead>
-                        <tbody id="agentsTableBody">
-                            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                        <thead><tr>
+                            <th>ID</th><th>Title</th><th>Type</th><th>Status</th>
+                            <th>Agent</th><th>Payout</th><th>Created</th>
+                        </tr></thead>
+                        <tbody id="searchResultsBody">
+                            <tr><td colspan="7" class="empty-state">Enter a search query or browse all tasks</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                    <span id="searchResultCount" style="font-size: 12px; color: var(--text-dim);"></span>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" id="searchPrevBtn" onclick="searchPage(-1)" style="display:none;">Previous</button>
+                        <button class="btn btn-secondary" id="searchNextBtn" onclick="searchPage(1)" style="display:none;">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Detail Panel -->
+            <div class="card detail-panel" id="taskDetailPanel">
+                <h2>Task Details</h2>
+                <div class="detail-grid" id="taskDetailGrid"></div>
+                <div class="milestone-list" id="milestoneList"></div>
             </div>
         </div>
+    </div>
 
-        <!-- Event Log -->
-        <div class="card" style="margin-top: 0;">
-            <h2>Live Events</h2>
-            <div class="event-log" id="eventLog">
-                <div class="empty-state">Waiting for events...</div>
+    <!-- ═══ CREATE TASK TAB ════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-create">
+        <div class="container">
+            <div class="card" style="max-width: 700px;">
+                <h2>Create New Task</h2>
+                <form id="createTaskForm" onsubmit="return createTask(event)">
+                    <div class="form-group">
+                        <label for="taskTitle">Title</label>
+                        <input type="text" id="taskTitle" placeholder="Descriptive task title" required maxlength="200" />
+                    </div>
+                    <div class="form-group">
+                        <label for="taskDescription">Description</label>
+                        <textarea id="taskDescription" placeholder="Detailed description of what needs to be done..." required maxlength="10000"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="taskType">Task Type</label>
+                            <select id="taskType" required>
+                                <option value="CodeGeneration">Code Generation</option>
+                                <option value="DataAnalysis">Data Analysis</option>
+                                <option value="TextWriting">Text Writing</option>
+                                <option value="ImageGeneration">Image Generation</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="taskPayout">Max Payout (sats)</label>
+                            <input type="number" id="taskPayout" placeholder="10000" required min="1" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="taskPriority">Priority (0-100)</label>
+                            <input type="number" id="taskPriority" placeholder="0" min="0" max="100" value="0" />
+                        </div>
+                        <div class="form-group">
+                            <label for="taskClientId">Client ID (optional)</label>
+                            <input type="text" id="taskClientId" placeholder="your-client-id" maxlength="100" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="taskCriteria">Verification Criteria (optional)</label>
+                        <textarea id="taskCriteria" placeholder="How should the output be verified?" maxlength="5000"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 14px; cursor: pointer;">
+                            <input type="checkbox" id="taskNl" style="width: auto;" />
+                            Use natural language parsing (AI interprets the description)
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="createTaskBtn">Create Task</button>
+                    <div class="form-feedback" id="createFeedback"></div>
+                </form>
             </div>
         </div>
+    </div>
 
-        <div class="refresh-time">Last refreshed: <span id="lastRefresh">--</span></div>
+    <!-- ═══ PAYMENTS TAB ══════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-payments">
+        <div class="container">
+            <div class="card">
+                <h2>Payment History</h2>
+                <div class="search-bar">
+                    <input type="number" id="paymentTaskFilter" placeholder="Filter by Task ID..." />
+                    <input type="number" id="paymentAgentFilter" placeholder="Filter by Agent ID..." />
+                    <button class="btn btn-primary" onclick="loadPayments()">Filter</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr>
+                            <th>ID</th><th>Type</th><th>Status</th><th>Amount</th>
+                            <th>Task</th><th>Agent</th><th>Created</th>
+                        </tr></thead>
+                        <tbody id="paymentsTableBody">
+                            <tr><td colspan="7" class="empty-state">Loading payments...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+                    <button class="btn btn-secondary" id="paymentPrevBtn" onclick="paymentPage(-1)" style="display:none;">Previous</button>
+                    <button class="btn btn-secondary" id="paymentNextBtn" onclick="paymentPage(1)" style="display:none;">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ EVENTS TAB ════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-events">
+        <div class="container">
+            <div class="card">
+                <h2>Live Event Stream</h2>
+                <div class="event-log" id="eventLog" style="max-height: 600px;">
+                    <div class="empty-state">Waiting for events...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         // ── Configuration ──────────────────────────────────────────────
-        const API_BASE = window.location.origin;
-        const REFRESH_INTERVAL = 15000; // 15 seconds
+        var API_BASE = window.location.origin;
+        var REFRESH_INTERVAL = 15000;
 
         // ── Helpers ────────────────────────────────────────────────────
         function formatSats(sats) {
@@ -420,55 +728,83 @@
 
         function formatTime(dateStr) {
             if (!dateStr) return '--';
-            const d = new Date(dateStr);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            var d = new Date(dateStr);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
 
         function formatDate(dateStr) {
             if (!dateStr) return '--';
-            const d = new Date(dateStr);
+            var d = new Date(dateStr);
             return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
         }
 
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '--';
+            var d = new Date(dateStr);
+            return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
         function statusBadge(status) {
-            const cls = 'badge-' + (status || '').toLowerCase();
+            var cls = 'badge-' + (status || '').toLowerCase();
             return '<span class="badge ' + cls + '">' + (status || 'Unknown') + '</span>';
         }
 
         function scoreBar(score) {
-            const pct = Math.round(score * 100);
-            let color = 'var(--green)';
+            var pct = Math.round(score * 100);
+            var color = 'var(--green)';
             if (score < 0.3) color = 'var(--red)';
             else if (score < 0.6) color = 'var(--yellow)';
             return '<span class="score-bar"><span class="fill" style="width:' + pct + '%;background:' + color + '"></span></span>' + score.toFixed(2);
         }
 
         function getApiHeaders() {
-            const headers = { 'Accept': 'application/json' };
-            // Check if an API key has been set in localStorage
-            const apiKey = localStorage.getItem('dashboard_api_key');
-            if (apiKey) {
-                headers['X-Api-Key'] = apiKey;
-            }
+            var headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+            var apiKey = localStorage.getItem('dashboard_api_key');
+            if (apiKey) headers['X-Api-Key'] = apiKey;
             return headers;
         }
 
-        async function apiFetch(path) {
+        async function apiFetch(path, options) {
             try {
-                const resp = await fetch(API_BASE + path, { headers: getApiHeaders() });
-                if (!resp.ok) return null;
+                var opts = options || {};
+                opts.headers = Object.assign(getApiHeaders(), opts.headers || {});
+                var resp = await fetch(API_BASE + path, opts);
+                if (!resp.ok) {
+                    var errorBody = null;
+                    try { errorBody = await resp.json(); } catch(e) {}
+                    return { _error: true, status: resp.status, detail: errorBody?.detail || resp.statusText, body: errorBody };
+                }
                 return await resp.json();
             } catch (e) {
                 console.warn('API fetch failed:', path, e);
-                return null;
+                return { _error: true, status: 0, detail: e.message };
             }
         }
 
-        // ── Data Loading ───────────────────────────────────────────────
-        async function loadSummary() {
-            const data = await apiFetch('/api/analytics/summary');
-            if (!data) return;
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
 
+        // ── Tab Navigation ─────────────────────────────────────────────
+        document.querySelectorAll('.nav-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+                document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+
+                if (tab.dataset.tab === 'tasks') searchTasks();
+                if (tab.dataset.tab === 'payments') loadPayments();
+            });
+        });
+
+        // ── Overview Data Loading ──────────────────────────────────────
+        async function loadSummary() {
+            var data = await apiFetch('/api/analytics/summary');
+            if (data._error) return;
             document.getElementById('totalTasks').textContent = data.totalTasks ?? 0;
             document.getElementById('inProgressTasks').textContent = data.inProgressTasks ?? 0;
             document.getElementById('completedTasks').textContent = data.completedTasks ?? 0;
@@ -477,16 +813,14 @@
             document.getElementById('totalSpent').textContent = formatSats(data.totalSatsSpent);
         }
 
-        async function loadTasks() {
-            const data = await apiFetch('/api/tasks?page=1&pageSize=10');
-            if (!data || !data.items) return;
-
-            const tbody = document.getElementById('tasksTableBody');
+        async function loadRecentTasks() {
+            var data = await apiFetch('/api/tasks?page=1&pageSize=10');
+            if (data._error || !data.items) return;
+            var tbody = document.getElementById('tasksTableBody');
             if (data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No tasks found</td></tr>';
                 return;
             }
-
             tbody.innerHTML = data.items.map(function(t) {
                 return '<tr>' +
                     '<td>#' + t.id + '</td>' +
@@ -499,15 +833,13 @@
         }
 
         async function loadAgents() {
-            const data = await apiFetch('/api/analytics/agents');
-            if (!data) return;
-
-            const tbody = document.getElementById('agentsTableBody');
-            if (data.length === 0) {
+            var data = await apiFetch('/api/analytics/agents');
+            if (data._error) return;
+            var tbody = document.getElementById('agentsTableBody');
+            if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents found</td></tr>';
                 return;
             }
-
             tbody.innerHTML = data.map(function(a) {
                 return '<tr>' +
                     '<td>' + escapeHtml(a.agentName || '') + '</td>' +
@@ -520,41 +852,217 @@
         }
 
         async function loadTimeline() {
-            const data = await apiFetch('/api/analytics/timeline?days=30');
-            if (!data || data.length === 0) {
+            var data = await apiFetch('/api/analytics/timeline?days=30');
+            if (data._error || !data || data.length === 0) {
                 document.getElementById('timelineChart').innerHTML = '<div class="empty-state">No data available</div>';
                 return;
             }
-
-            const maxVal = Math.max(1, ...data.map(function(d) { return d.created + d.completed; }));
-            const chart = document.getElementById('timelineChart');
-            chart.innerHTML = data.map(function(d) {
-                const h = Math.max(2, ((d.created + d.completed) / maxVal) * 90);
+            var maxVal = Math.max(1, ...data.map(function(d) { return d.created + d.completed; }));
+            document.getElementById('timelineChart').innerHTML = data.map(function(d) {
+                var h = Math.max(2, ((d.created + d.completed) / maxVal) * 90);
                 return '<div class="timeline-bar" style="height:' + h + 'px">' +
-                    '<div class="tooltip">' + d.date + '<br>Created: ' + d.created + '<br>Completed: ' + d.completed + '</div>' +
-                    '</div>';
+                    '<div class="tooltip">' + d.date + '<br>Created: ' + d.created + '<br>Completed: ' + d.completed + '</div></div>';
             }).join('');
         }
 
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
+        // ── Tasks Search ───────────────────────────────────────────────
+        var searchState = { page: 1, pageSize: 20, query: '', status: '' };
+
+        async function searchTasks() {
+            searchState.page = 1;
+            searchState.query = document.getElementById('taskSearchInput').value;
+            searchState.status = document.getElementById('taskSearchStatus').value;
+            await loadSearchResults();
+        }
+
+        async function searchPage(delta) {
+            searchState.page += delta;
+            if (searchState.page < 1) searchState.page = 1;
+            await loadSearchResults();
+        }
+
+        async function loadSearchResults() {
+            var q = searchState.query;
+            var url;
+            if (q) {
+                url = '/api/tasks/search?q=' + encodeURIComponent(q) +
+                    '&page=' + searchState.page + '&pageSize=' + searchState.pageSize;
+                if (searchState.status) url += '&status=' + searchState.status;
+            } else {
+                url = '/api/tasks?page=' + searchState.page + '&pageSize=' + searchState.pageSize;
+                if (searchState.status) url += '&status=' + searchState.status;
+            }
+
+            var data = await apiFetch(url);
+            var tbody = document.getElementById('searchResultsBody');
+
+            if (data._error || !data.items || data.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No tasks found</td></tr>';
+                document.getElementById('searchResultCount').textContent = '';
+                document.getElementById('searchPrevBtn').style.display = 'none';
+                document.getElementById('searchNextBtn').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('searchResultCount').textContent =
+                'Showing ' + ((searchState.page - 1) * searchState.pageSize + 1) + '-' +
+                Math.min(searchState.page * searchState.pageSize, data.totalCount) + ' of ' + data.totalCount;
+
+            document.getElementById('searchPrevBtn').style.display = searchState.page > 1 ? '' : 'none';
+            document.getElementById('searchNextBtn').style.display = data.hasMore ? '' : 'none';
+
+            tbody.innerHTML = data.items.map(function(t) {
+                return '<tr class="clickable" onclick="showTaskDetail(' + t.id + ')">' +
+                    '<td>#' + t.id + '</td>' +
+                    '<td>' + escapeHtml(t.title || '') + '</td>' +
+                    '<td>' + escapeHtml(t.taskType || '') + '</td>' +
+                    '<td>' + statusBadge(t.status) + '</td>' +
+                    '<td>' + (t.assignedAgentId || '--') + '</td>' +
+                    '<td class="sats">' + formatSats(t.maxPayoutSats) + '</td>' +
+                    '<td>' + formatDateTime(t.createdAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        async function showTaskDetail(taskId) {
+            var data = await apiFetch('/api/tasks/' + taskId);
+            if (data._error) return;
+
+            var panel = document.getElementById('taskDetailPanel');
+            panel.classList.add('open');
+
+            document.getElementById('taskDetailGrid').innerHTML =
+                '<span class="detail-label">ID</span><span>#' + data.id + '</span>' +
+                '<span class="detail-label">External ID</span><span>' + escapeHtml(data.externalId || '') + '</span>' +
+                '<span class="detail-label">Title</span><span>' + escapeHtml(data.title || '') + '</span>' +
+                '<span class="detail-label">Description</span><span>' + escapeHtml(data.description || '') + '</span>' +
+                '<span class="detail-label">Type</span><span>' + escapeHtml(data.taskType || '') + '</span>' +
+                '<span class="detail-label">Status</span><span>' + statusBadge(data.status) + '</span>' +
+                '<span class="detail-label">Max Payout</span><span class="sats">' + formatSats(data.maxPayoutSats) + ' sats</span>' +
+                '<span class="detail-label">Actual Payout</span><span class="sats">' + formatSats(data.actualPayoutSats) + ' sats</span>' +
+                '<span class="detail-label">Agent</span><span>' + (data.assignedAgentId || 'Unassigned') + '</span>' +
+                '<span class="detail-label">Priority</span><span>' + (data.priority || 0) + '</span>' +
+                '<span class="detail-label">Created</span><span>' + formatDateTime(data.createdAt) + '</span>';
+
+            var mlHtml = '';
+            if (data.milestones && data.milestones.length > 0) {
+                mlHtml = '<h2 style="margin-top: 16px;">Milestones</h2>';
+                mlHtml += data.milestones.map(function(m) {
+                    return '<div class="milestone-item">' +
+                        '<span>#' + m.sequenceNumber + ' ' + escapeHtml(m.title || '') + '</span>' +
+                        '<span>' + statusBadge(m.status) + ' <span class="sats">' + formatSats(m.payoutSats) + ' sats</span></span>' +
+                        '</div>';
+                }).join('');
+            }
+            document.getElementById('milestoneList').innerHTML = mlHtml;
+
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ── Create Task ────────────────────────────────────────────────
+        async function createTask(event) {
+            event.preventDefault();
+            var btn = document.getElementById('createTaskBtn');
+            var feedback = document.getElementById('createFeedback');
+            btn.disabled = true;
+            feedback.className = 'form-feedback';
+            feedback.style.display = 'none';
+
+            var body = {
+                title: document.getElementById('taskTitle').value,
+                description: document.getElementById('taskDescription').value,
+                taskType: document.getElementById('taskType').value,
+                maxPayoutSats: parseInt(document.getElementById('taskPayout').value) || 0,
+                priority: parseInt(document.getElementById('taskPriority').value) || 0,
+                clientId: document.getElementById('taskClientId').value || null,
+                verificationCriteria: document.getElementById('taskCriteria').value || null,
+                useNaturalLanguage: document.getElementById('taskNl').checked
+            };
+
+            var result = await apiFetch('/api/tasks', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+
+            btn.disabled = false;
+
+            if (result._error) {
+                feedback.className = 'form-feedback error';
+                feedback.textContent = result.detail || 'Failed to create task.';
+                feedback.style.display = 'block';
+                return false;
+            }
+
+            feedback.className = 'form-feedback success';
+            feedback.textContent = 'Task #' + result.taskId + ' created successfully (ID: ' + result.externalId + ')';
+            feedback.style.display = 'block';
+
+            document.getElementById('createTaskForm').reset();
+            refreshAll();
+            return false;
+        }
+
+        // ── Payments ───────────────────────────────────────────────────
+        var paymentState = { page: 1, pageSize: 20, cursor: null, cursors: [null] };
+
+        async function loadPayments() {
+            var taskId = document.getElementById('paymentTaskFilter').value;
+            var agentId = document.getElementById('paymentAgentFilter').value;
+
+            var url = '/api/payments?pageSize=' + paymentState.pageSize;
+            if (taskId) url += '&taskId=' + taskId;
+            if (agentId) url += '&agentId=' + agentId;
+            if (paymentState.cursor) url += '&cursor=' + paymentState.cursor;
+
+            var data = await apiFetch(url);
+            var tbody = document.getElementById('paymentsTableBody');
+
+            if (data._error || !data.items || data.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No payments found</td></tr>';
+                document.getElementById('paymentPrevBtn').style.display = 'none';
+                document.getElementById('paymentNextBtn').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('paymentPrevBtn').style.display = paymentState.page > 1 ? '' : 'none';
+            document.getElementById('paymentNextBtn').style.display = data.nextCursor ? '' : 'none';
+
+            if (data.nextCursor && paymentState.cursors.length <= paymentState.page) {
+                paymentState.cursors.push(data.nextCursor);
+            }
+
+            tbody.innerHTML = data.items.map(function(p) {
+                return '<tr>' +
+                    '<td>#' + p.id + '</td>' +
+                    '<td>' + statusBadge(p.paymentType) + '</td>' +
+                    '<td>' + statusBadge(p.status) + '</td>' +
+                    '<td class="sats">' + formatSats(p.amountSats) + ' sats</td>' +
+                    '<td>' + (p.taskId ? '#' + p.taskId : '--') + '</td>' +
+                    '<td>' + (p.agentId || '--') + '</td>' +
+                    '<td>' + formatDateTime(p.createdAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function paymentPage(delta) {
+            paymentState.page += delta;
+            if (paymentState.page < 1) paymentState.page = 1;
+            paymentState.cursor = paymentState.cursors[paymentState.page - 1] || null;
+            loadPayments();
         }
 
         // ── Event Log ──────────────────────────────────────────────────
-        const MAX_EVENTS = 50;
-        let events = [];
+        var MAX_EVENTS = 100;
+        var events = [];
 
         function addEvent(type, detail) {
-            const now = new Date();
-            events.unshift({ time: now, type: type, detail: detail });
+            events.unshift({ time: new Date(), type: type, detail: detail });
             if (events.length > MAX_EVENTS) events.pop();
             renderEvents();
         }
 
         function renderEvents() {
-            const log = document.getElementById('eventLog');
+            var log = document.getElementById('eventLog');
             if (events.length === 0) {
                 log.innerHTML = '<div class="empty-state">Waiting for events...</div>';
                 return;
@@ -569,11 +1077,11 @@
         }
 
         // ── SignalR Connection ─────────────────────────────────────────
-        let connection = null;
+        var connection = null;
 
         function setConnectionStatus(connected) {
-            const dot = document.getElementById('connectionDot');
-            const text = document.getElementById('connectionText');
+            var dot = document.getElementById('connectionDot');
+            var text = document.getElementById('connectionText');
             if (connected) {
                 dot.className = 'status-dot connected';
                 text.textContent = 'Connected';
@@ -584,13 +1092,11 @@
         }
 
         async function initSignalR() {
-            // SignalR JS client is bundled with ASP.NET - load it dynamically
             if (typeof signalR === 'undefined') {
-                // Try loading the SignalR client from the standard CDN-free path
                 try {
                     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js');
                 } catch (e) {
-                    console.warn('Could not load SignalR client library. Real-time updates disabled.');
+                    console.warn('Could not load SignalR client library.');
                     setConnectionStatus(false);
                     document.getElementById('connectionText').textContent = 'SignalR unavailable';
                     return;
@@ -602,14 +1108,14 @@
                 .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
                 .build();
 
-            // Register event handlers
+            // ── Existing events ──
             connection.on('TaskAssigned', function(evt) {
                 addEvent('TaskAssigned', 'Task #' + evt.taskId + ' assigned to Agent #' + evt.agentId);
                 refreshAll();
             });
 
             connection.on('MilestoneVerified', function(evt) {
-                const status = evt.passed ? 'PASSED' : 'FAILED';
+                var status = evt.passed ? 'PASSED' : 'FAILED';
                 addEvent('MilestoneVerified', 'Milestone #' + evt.milestoneId + ' ' + status + ' (score: ' + (evt.score || 0).toFixed(3) + ')');
                 refreshAll();
             });
@@ -639,18 +1145,29 @@
                 refreshAll();
             });
 
+            // ── New events ──
+            connection.on('TaskStatusChanged', function(evt) {
+                addEvent('TaskStatusChanged', 'Task #' + evt.taskId + ': ' + evt.previousStatus + ' -> ' + evt.newStatus);
+                refreshAll();
+            });
+
+            connection.on('EscrowCreated', function(evt) {
+                addEvent('EscrowCreated', 'Escrow #' + evt.escrowId + ' for Milestone #' + evt.milestoneId + ' - ' + formatSats(evt.amountSats) + ' sats');
+                refreshAll();
+            });
+
+            connection.on('EscrowCancelled', function(evt) {
+                addEvent('EscrowCancelled', 'Escrow #' + evt.escrowId + ' cancelled: ' + (evt.reason || ''));
+                refreshAll();
+            });
+
             connection.onreconnecting(function() {
                 setConnectionStatus(false);
                 document.getElementById('connectionText').textContent = 'Reconnecting...';
             });
 
-            connection.onreconnected(function() {
-                setConnectionStatus(true);
-            });
-
-            connection.onclose(function() {
-                setConnectionStatus(false);
-            });
+            connection.onreconnected(function() { setConnectionStatus(true); });
+            connection.onclose(function() { setConnectionStatus(false); });
 
             try {
                 await connection.start();
@@ -663,7 +1180,7 @@
 
         function loadScript(src) {
             return new Promise(function(resolve, reject) {
-                const script = document.createElement('script');
+                var script = document.createElement('script');
                 script.src = src;
                 script.onload = resolve;
                 script.onerror = reject;
@@ -671,9 +1188,14 @@
             });
         }
 
+        // ── Search on Enter key ────────────────────────────────────────
+        document.getElementById('taskSearchInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') searchTasks();
+        });
+
         // ── Refresh Loop ───────────────────────────────────────────────
         async function refreshAll() {
-            await Promise.all([loadSummary(), loadTasks(), loadAgents()]);
+            await Promise.all([loadSummary(), loadRecentTasks(), loadAgents()]);
             document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
         }
 
@@ -681,14 +1203,10 @@
             await refreshAll();
             await loadTimeline();
             initSignalR();
-
-            // Periodic refresh
             setInterval(refreshAll, REFRESH_INTERVAL);
-            // Timeline refreshes less often
             setInterval(loadTimeline, 60000);
         }
 
-        // Remove the invalid script tag src above (it was a placeholder)
         init();
     </script>
 </body>

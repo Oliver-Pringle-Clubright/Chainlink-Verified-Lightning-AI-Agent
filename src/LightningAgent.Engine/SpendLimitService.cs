@@ -13,6 +13,10 @@ public class SpendLimitService : ISpendLimitService
     private readonly SpendLimitSettings _settings;
     private readonly ILogger<SpendLimitService> _logger;
 
+    // Prevents concurrent check+record for the same agent
+    private static readonly Dictionary<int, SemaphoreSlim> _agentLocks = new();
+    private static readonly object _lockMapGuard = new();
+
     public SpendLimitService(
         ISpendLimitRepository spendLimitRepo,
         IOptions<SpendLimitSettings> settings,
@@ -53,6 +57,42 @@ public class SpendLimitService : ISpendLimitService
     }
 
     public async Task RecordSpendAsync(int agentId, long amountSats, CancellationToken ct = default)
+    {
+        // Serialize check+record per agent to prevent TOCTOU race conditions
+        var semaphore = GetAgentLock(agentId);
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            await RecordSpendCoreAsync(agentId, amountSats, ct);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Atomically checks the limit and records the spend. Returns false if the limit would be exceeded.
+    /// </summary>
+    public async Task<bool> TryCheckAndRecordSpendAsync(int agentId, long amountSats, CancellationToken ct = default)
+    {
+        var semaphore = GetAgentLock(agentId);
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            if (!await CheckLimitAsync(agentId, amountSats, ct))
+                return false;
+
+            await RecordSpendCoreAsync(agentId, amountSats, ct);
+            return true;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    private async Task RecordSpendCoreAsync(int agentId, long amountSats, CancellationToken ct)
     {
         var limit = await _spendLimitRepo.GetByAgentIdAsync(agentId, ct);
 
@@ -125,5 +165,18 @@ public class SpendLimitService : ISpendLimitService
         }
 
         return resetCount;
+    }
+
+    private static SemaphoreSlim GetAgentLock(int agentId)
+    {
+        lock (_lockMapGuard)
+        {
+            if (!_agentLocks.TryGetValue(agentId, out var semaphore))
+            {
+                semaphore = new SemaphoreSlim(1, 1);
+                _agentLocks[agentId] = semaphore;
+            }
+            return semaphore;
+        }
     }
 }
