@@ -494,7 +494,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// ── Static files (wwwroot for dashboard) ─────────────────────────────
+// ── Static files (wwwroot for dashboard + landing page) ──────────────
+app.UseDefaultFiles(); // serves index.html at /
 app.UseStaticFiles();
 
 // ── Middleware pipeline ─────────────────────────────────────────────
