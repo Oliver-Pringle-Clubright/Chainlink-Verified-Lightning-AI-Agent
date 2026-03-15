@@ -1,13 +1,14 @@
 using LightningAgent.Api.DTOs;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Models;
+using LightningAgent.Engine.PaymentProviders;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LightningAgent.Api.Controllers;
 
 /// <summary>
-/// Provides read access to payment records.
+/// Provides read access to payment records and available payment methods.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
@@ -17,14 +18,28 @@ namespace LightningAgent.Api.Controllers;
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentRepository _paymentRepository;
+    private readonly PaymentRouter _paymentRouter;
     private readonly ILogger<PaymentsController> _logger;
 
     public PaymentsController(
         IPaymentRepository paymentRepository,
+        PaymentRouter paymentRouter,
         ILogger<PaymentsController> logger)
     {
         _paymentRepository = paymentRepository;
+        _paymentRouter = paymentRouter;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Returns all available payment methods and their status.
+    /// </summary>
+    [HttpGet("methods")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetPaymentMethods()
+    {
+        var methods = _paymentRouter.GetAvailableMethods();
+        return Ok(methods);
     }
 
     /// <summary>

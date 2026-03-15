@@ -9,7 +9,7 @@ public class PaymentRepository : IPaymentRepository
 {
     private readonly SqliteConnectionFactory _connectionFactory;
 
-    private const string SelectColumns = "Id, EscrowId, TaskId, MilestoneId, AgentId, AmountSats, AmountUsd, PaymentHash, PaymentType, Status, CreatedAt, SettledAt";
+    private const string SelectColumns = "Id, EscrowId, TaskId, MilestoneId, AgentId, AmountSats, AmountUsd, PaymentHash, PaymentType, Status, CreatedAt, SettledAt, PaymentMethod, ChainId, TokenAddress, TransactionHash, SenderAddress, ReceiverAddress, AmountWei";
 
     public PaymentRepository(SqliteConnectionFactory connectionFactory)
     {
@@ -205,8 +205,8 @@ public class PaymentRepository : IPaymentRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"INSERT INTO Payments (EscrowId, TaskId, MilestoneId, AgentId, AmountSats, AmountUsd, PaymentHash, PaymentType, Status, CreatedAt, SettledAt)
-            VALUES (@EscrowId, @TaskId, @MilestoneId, @AgentId, @AmountSats, @AmountUsd, @PaymentHash, @PaymentType, @Status, @CreatedAt, @SettledAt);
+        cmd.CommandText = @"INSERT INTO Payments (EscrowId, TaskId, MilestoneId, AgentId, AmountSats, AmountUsd, PaymentHash, PaymentType, Status, CreatedAt, SettledAt, PaymentMethod, ChainId, TokenAddress, TransactionHash, SenderAddress, ReceiverAddress, AmountWei)
+            VALUES (@EscrowId, @TaskId, @MilestoneId, @AgentId, @AmountSats, @AmountUsd, @PaymentHash, @PaymentType, @Status, @CreatedAt, @SettledAt, @PaymentMethod, @ChainId, @TokenAddress, @TransactionHash, @SenderAddress, @ReceiverAddress, @AmountWei);
             SELECT last_insert_rowid();";
         cmd.Parameters.AddWithValue("@EscrowId", (object?)payment.EscrowId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@TaskId", payment.TaskId);
@@ -219,6 +219,13 @@ public class PaymentRepository : IPaymentRepository
         cmd.Parameters.AddWithValue("@Status", payment.Status.ToString());
         cmd.Parameters.AddWithValue("@CreatedAt", payment.CreatedAt.ToString("o"));
         cmd.Parameters.AddWithValue("@SettledAt", payment.SettledAt.HasValue ? payment.SettledAt.Value.ToString("o") : DBNull.Value);
+        cmd.Parameters.AddWithValue("@PaymentMethod", payment.PaymentMethod.ToString());
+        cmd.Parameters.AddWithValue("@ChainId", (object?)payment.ChainId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TokenAddress", (object?)payment.TokenAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TransactionHash", (object?)payment.TransactionHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@SenderAddress", (object?)payment.SenderAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ReceiverAddress", (object?)payment.ReceiverAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AmountWei", (object?)payment.AmountWei ?? DBNull.Value);
 
         var result = await cmd.ExecuteScalarAsync();
         return Convert.ToInt32(result);
@@ -230,7 +237,9 @@ public class PaymentRepository : IPaymentRepository
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"UPDATE Payments SET EscrowId = @EscrowId, TaskId = @TaskId, MilestoneId = @MilestoneId,
             AgentId = @AgentId, AmountSats = @AmountSats, AmountUsd = @AmountUsd, PaymentHash = @PaymentHash,
-            PaymentType = @PaymentType, Status = @Status, SettledAt = @SettledAt
+            PaymentType = @PaymentType, Status = @Status, SettledAt = @SettledAt,
+            PaymentMethod = @PaymentMethod, ChainId = @ChainId, TokenAddress = @TokenAddress,
+            TransactionHash = @TransactionHash, SenderAddress = @SenderAddress, ReceiverAddress = @ReceiverAddress, AmountWei = @AmountWei
             WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", payment.Id);
         cmd.Parameters.AddWithValue("@EscrowId", (object?)payment.EscrowId ?? DBNull.Value);
@@ -243,6 +252,13 @@ public class PaymentRepository : IPaymentRepository
         cmd.Parameters.AddWithValue("@PaymentType", payment.PaymentType.ToString());
         cmd.Parameters.AddWithValue("@Status", payment.Status.ToString());
         cmd.Parameters.AddWithValue("@SettledAt", payment.SettledAt.HasValue ? payment.SettledAt.Value.ToString("o") : DBNull.Value);
+        cmd.Parameters.AddWithValue("@PaymentMethod", payment.PaymentMethod.ToString());
+        cmd.Parameters.AddWithValue("@ChainId", (object?)payment.ChainId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TokenAddress", (object?)payment.TokenAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TransactionHash", (object?)payment.TransactionHash ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@SenderAddress", (object?)payment.SenderAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ReceiverAddress", (object?)payment.ReceiverAddress ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AmountWei", (object?)payment.AmountWei ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync();
     }
@@ -262,7 +278,14 @@ public class PaymentRepository : IPaymentRepository
             PaymentType = Enum.Parse<PaymentType>(reader.GetString(8)),
             Status = Enum.Parse<PaymentStatus>(reader.GetString(9)),
             CreatedAt = DateTime.Parse(reader.GetString(10)),
-            SettledAt = reader.IsDBNull(11) ? null : DateTime.Parse(reader.GetString(11))
+            SettledAt = reader.IsDBNull(11) ? null : DateTime.Parse(reader.GetString(11)),
+            PaymentMethod = reader.FieldCount > 12 && !reader.IsDBNull(12) ? Enum.Parse<PaymentMethod>(reader.GetString(12)) : PaymentMethod.Lightning,
+            ChainId = reader.FieldCount > 13 && !reader.IsDBNull(13) ? reader.GetInt64(13) : null,
+            TokenAddress = reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetString(14) : null,
+            TransactionHash = reader.FieldCount > 15 && !reader.IsDBNull(15) ? reader.GetString(15) : null,
+            SenderAddress = reader.FieldCount > 16 && !reader.IsDBNull(16) ? reader.GetString(16) : null,
+            ReceiverAddress = reader.FieldCount > 17 && !reader.IsDBNull(17) ? reader.GetString(17) : null,
+            AmountWei = reader.FieldCount > 18 && !reader.IsDBNull(18) ? reader.GetString(18) : null
         };
     }
 }

@@ -2249,3 +2249,26 @@ New dashboard tabs added alongside existing Overview, Tasks, Create Task, Paymen
 - **Reputation cache invalidation**: Agent reputation updates are immediately visible via the API
 - **Verification threshold**: Lowered from 0.7 to 0.55 for more reasonable pass rates
 - **CoinGecko API fix**: Correct API key header selection (demo vs pro)
+
+### 28.4 Multi-Payment Layer
+
+The marketplace now supports 10 payment methods across all chains:
+
+| Method | Token | Chains |
+|--------|-------|--------|
+| Lightning Network | BTC (sats) | Lightning |
+| On-Chain Bitcoin | BTC | Bitcoin |
+| USDC (ERC-20) | USDC | Ethereum, Arbitrum, Base, Polygon, BNB, Optimism, Avalanche |
+| USDT (ERC-20) | USDT | Ethereum, Arbitrum, Polygon, BNB, Optimism, Avalanche |
+| LINK (ERC-20) | LINK | Ethereum, Arbitrum, Base, Polygon, BNB, Optimism, Avalanche |
+| ETH (Native) | ETH | Ethereum, Arbitrum, Base, Optimism |
+| MATIC (Native) | MATIC | Polygon |
+| BNB (Native) | BNB | BNB Smart Chain |
+| AVAX (Native) | AVAX | Avalanche |
+| CCIP Cross-Chain | Any | Any supported chain pair |
+
+**Payment Router**: Automatically selects the best available payment provider. Falls back to alternative methods if the preferred one is unavailable.
+
+**API Endpoint**: `GET /api/payments/methods` returns all available payment methods and their status.
+
+**Token Addresses**: All well-known token addresses (USDC, USDT, LINK) are pre-configured per chain via `TokenAddressRegistry`.

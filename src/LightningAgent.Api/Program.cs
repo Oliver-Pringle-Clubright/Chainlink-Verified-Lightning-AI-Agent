@@ -77,6 +77,13 @@ builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pr
 builder.Services.Configure<CoinGeckoSettings>(builder.Configuration.GetSection("CoinGecko"));
 builder.Services.Configure<MultiChainSettings>(builder.Configuration.GetSection("MultiChain"));
 builder.Services.AddScoped<LightningAgent.Engine.Services.MultiChainPriceService>();
+
+// ── Payment Providers ────────────────────────────────────────────────
+builder.Services.AddScoped<IPaymentProvider, LightningAgent.Engine.PaymentProviders.LightningPaymentProvider>();
+builder.Services.AddScoped<IPaymentProvider, LightningAgent.Engine.PaymentProviders.Erc20PaymentProvider>();
+builder.Services.AddScoped<IPaymentProvider, LightningAgent.Engine.PaymentProviders.NativeTokenPaymentProvider>();
+builder.Services.AddScoped<IPaymentProvider, LightningAgent.Engine.PaymentProviders.CcipPaymentProvider>();
+builder.Services.AddScoped<LightningAgent.Engine.PaymentProviders.PaymentRouter>();
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));

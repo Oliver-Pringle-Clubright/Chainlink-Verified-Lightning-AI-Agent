@@ -191,5 +191,15 @@ public class MigrationRunner
             );
             CREATE UNIQUE INDEX IF NOT EXISTS IX_Escrows_MilestoneId_Unique ON Escrows(MilestoneId);
         ");
+
+        yield return ("2.3.0", "Add multi-chain payment fields to Payments table", @"
+            ALTER TABLE Payments ADD COLUMN PaymentMethod TEXT NOT NULL DEFAULT 'Lightning';
+            ALTER TABLE Payments ADD COLUMN ChainId INTEGER;
+            ALTER TABLE Payments ADD COLUMN TokenAddress TEXT;
+            ALTER TABLE Payments ADD COLUMN TransactionHash TEXT;
+            ALTER TABLE Payments ADD COLUMN SenderAddress TEXT;
+            ALTER TABLE Payments ADD COLUMN ReceiverAddress TEXT;
+            ALTER TABLE Payments ADD COLUMN AmountWei TEXT;
+        ");
     }
 }

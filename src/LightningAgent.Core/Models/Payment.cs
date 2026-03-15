@@ -13,7 +13,16 @@ public class Payment
     public double? AmountUsd { get; set; }
     public string? PaymentHash { get; set; }
     public PaymentType PaymentType { get; set; }
+    public PaymentMethod PaymentMethod { get; set; }
     public PaymentStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? SettledAt { get; set; }
+
+    // Multi-chain payment fields
+    public long? ChainId { get; set; }
+    public string? TokenAddress { get; set; }
+    public string? TransactionHash { get; set; }
+    public string? SenderAddress { get; set; }
+    public string? ReceiverAddress { get; set; }
+    public string? AmountWei { get; set; }
 }
