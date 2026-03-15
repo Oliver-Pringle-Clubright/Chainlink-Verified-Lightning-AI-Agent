@@ -175,7 +175,7 @@ contract VerifiedEscrow is FunctionsClient, ConfirmedOwner, ReentrancyGuard {
         if (e.status != EscrowStatus.Active) revert EscrowNotActive(escrowId);
 
         FunctionsRequest.Request memory req;
-        req.initializeRequestForInlineCode(verificationSource);
+        req.initializeRequestForInlineJavaScript(verificationSource);
 
         string[] memory args = new string[](2);
         args[0] = _uint2str(e.taskId);

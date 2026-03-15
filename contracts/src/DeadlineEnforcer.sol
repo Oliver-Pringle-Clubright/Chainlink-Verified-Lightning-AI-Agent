@@ -14,17 +14,15 @@ import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/Confir
  *      checkUpkeep() scans for expired deadlines.
  *      performUpkeep() triggers the escrow refund.
  */
+interface IVerifiedEscrow {
+    function escrows(uint256 escrowId) external view returns (
+        address client, address agent, address token, uint256 amount,
+        uint256 taskId, uint256 milestoneId, uint64 deadline, uint8 status
+    );
+    function reclaimAfterDeadline(uint256 escrowId) external;
+}
+
 contract DeadlineEnforcer is AutomationCompatibleInterface, ConfirmedOwner {
-
-    // ── Interfaces ───────────────────────────────────────────────────────
-
-    interface IVerifiedEscrow {
-        function escrows(uint256 escrowId) external view returns (
-            address client, address agent, address token, uint256 amount,
-            uint256 taskId, uint256 milestoneId, uint64 deadline, uint8 status
-        );
-        function reclaimAfterDeadline(uint256 escrowId) external;
-    }
 
     // ── State ────────────────────────────────────────────────────────────
 

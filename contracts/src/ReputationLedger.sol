@@ -163,7 +163,7 @@ contract ReputationLedger is FunctionsClient, ConfirmedOwner {
      */
     function syncReputation(uint256 agentId) external returns (bytes32 requestId) {
         FunctionsRequest.Request memory req;
-        req.initializeRequestForInlineCode(syncSource);
+        req.initializeRequestForInlineJavaScript(syncSource);
 
         string[] memory args = new string[](1);
         args[0] = _uint2str(agentId);
