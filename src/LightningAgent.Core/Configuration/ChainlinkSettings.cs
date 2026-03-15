@@ -25,6 +25,12 @@ public class ChainlinkSettings
     public string CcipRouterAddress { get; set; } = "";
     public ulong CcipSourceChainSelector { get; set; }
 
+    // Deployed contract addresses (VerifiedEscrow, FairAssignment, ReputationLedger, DeadlineEnforcer)
+    public string VerifiedEscrowAddress { get; set; } = "";
+    public string FairAssignmentAddress { get; set; } = "";
+    public string ReputationLedgerAddress { get; set; } = "";
+    public string DeadlineEnforcerAddress { get; set; } = "";
+
     // Network-specific configurations
     public ChainlinkNetworkConfig Testnet { get; set; } = new();
     public ChainlinkNetworkConfig Mainnet { get; set; } = new();

@@ -116,6 +116,10 @@ builder.Services.PostConfigure<ChainlinkSettings>(settings =>
     if (!string.IsNullOrEmpty(source.PrivateKeyPath)) settings.PrivateKeyPath = source.PrivateKeyPath;
     if (!string.IsNullOrEmpty(source.CcipRouterAddress)) settings.CcipRouterAddress = source.CcipRouterAddress;
     if (source.CcipSourceChainSelector != 0) settings.CcipSourceChainSelector = source.CcipSourceChainSelector;
+    if (!string.IsNullOrEmpty(source.VerifiedEscrowAddress)) settings.VerifiedEscrowAddress = source.VerifiedEscrowAddress;
+    if (!string.IsNullOrEmpty(source.FairAssignmentAddress)) settings.FairAssignmentAddress = source.FairAssignmentAddress;
+    if (!string.IsNullOrEmpty(source.ReputationLedgerAddress)) settings.ReputationLedgerAddress = source.ReputationLedgerAddress;
+    if (!string.IsNullOrEmpty(source.DeadlineEnforcerAddress)) settings.DeadlineEnforcerAddress = source.DeadlineEnforcerAddress;
 });
 
 // ── Auto-detect chain ID and fill Chainlink addresses from registry ──
@@ -315,6 +319,8 @@ builder.Services.AddScoped<IDisputeResolver, DisputeResolver>();
 builder.Services.AddScoped<IFraudDetector, FraudDetector>();
 builder.Services.AddScoped<ChannelManagerService>();
 builder.Services.AddScoped<TaskDecompositionEngine>();
+builder.Services.AddScoped<OnChainEscrowService>();
+builder.Services.AddScoped<OnChainReputationService>();
 builder.Services.AddScoped<TaskLifecycleWorkflow>();
 builder.Services.AddScoped<MilestonePaymentWorkflow>();
 builder.Services.AddScoped<WorkerAgent>();

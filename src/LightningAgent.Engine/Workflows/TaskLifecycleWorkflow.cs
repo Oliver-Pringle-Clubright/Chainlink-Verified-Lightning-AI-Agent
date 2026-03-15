@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Security.Cryptography;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
@@ -5,6 +6,7 @@ using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Core.Models.Chainlink;
+using LightningAgent.Engine.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using VerificationEntity = LightningAgent.Core.Models.Verification;
@@ -23,6 +25,7 @@ public class TaskLifecycleWorkflow
     private readonly IReputationService _reputationService;
     private readonly IEventPublisher _eventPublisher;
     private readonly IChainlinkFunctionsClient _chainlinkFunctions;
+    private readonly OnChainReputationService _onChainReputation;
     private readonly ChainlinkSettings _chainlinkSettings;
     private readonly ILogger<TaskLifecycleWorkflow> _logger;
 
@@ -43,6 +46,7 @@ public class TaskLifecycleWorkflow
         IReputationService reputationService,
         IEventPublisher eventPublisher,
         IChainlinkFunctionsClient chainlinkFunctions,
+        OnChainReputationService onChainReputation,
         IOptions<ChainlinkSettings> chainlinkSettings,
         ILogger<TaskLifecycleWorkflow> logger)
     {
@@ -56,6 +60,7 @@ public class TaskLifecycleWorkflow
         _reputationService = reputationService;
         _eventPublisher = eventPublisher;
         _chainlinkFunctions = chainlinkFunctions;
+        _onChainReputation = onChainReputation;
         _chainlinkSettings = chainlinkSettings.Value;
         _logger = logger;
     }
@@ -199,6 +204,37 @@ public class TaskLifecycleWorkflow
                     _logger.LogWarning(
                         ex,
                         "Failed to post on-chain verification proof for milestone {MilestoneId} — milestone still passed",
+                        milestoneId);
+                }
+            }
+
+            // 6f. Record on-chain reputation attestation via ReputationLedger (best-effort)
+            if (!string.IsNullOrEmpty(_chainlinkSettings.ReputationLedgerAddress) && agentId > 0)
+            {
+                try
+                {
+                    var proofHash = SHA256.HashData(agentOutput);
+                    // Scale the weighted score to an integer (0-1000 basis points)
+                    var scoreBasisPoints = (BigInteger)(averageScore * 1000);
+
+                    await _onChainReputation.RecordAttestationAsync(
+                        new BigInteger(milestone.TaskId),
+                        new BigInteger(milestoneId),
+                        new BigInteger(agentId),
+                        scoreBasisPoints,
+                        passed: true,
+                        proofHash,
+                        ct);
+
+                    _logger.LogInformation(
+                        "On-chain reputation attestation recorded for milestone {MilestoneId}, agentId={AgentId}, score={Score}",
+                        milestoneId, agentId, scoreBasisPoints);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to record on-chain reputation attestation for milestone {MilestoneId} — milestone still passed",
                         milestoneId);
                 }
             }

@@ -2,3 +2,7 @@ node_modules/
 out/
 cache/
 broadcast/
+node_modules/
+lib/
+test/
+package*.json
