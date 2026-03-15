@@ -125,7 +125,7 @@ public static class StartupValidator
                     }
 
                     var networkSettings = configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
-                    bool isTestnet = chainId != 1 && chainId != 137 && chainId != 56; // Not mainnet, polygon mainnet, or BSC mainnet
+                    bool isTestnet = !ChainlinkAddressRegistry.IsMainnet(chainId);
 
                     if (networkSettings.IsTest && !isTestnet)
                     {
@@ -231,25 +231,7 @@ public static class StartupValidator
         }
     }
 
-    private static string GetNetworkName(long chainId) => chainId switch
-    {
-        1 => "Mainnet",
-        5 => "Goerli",
-        11155111 => "Sepolia",
-        17000 => "Holesky",
-        137 => "Polygon",
-        80001 => "Mumbai",
-        42161 => "Arbitrum One",
-        421614 => "Arbitrum Sepolia",
-        10 => "Optimism",
-        11155420 => "Optimism Sepolia",
-        8453 => "Base",
-        84532 => "Base Sepolia",
-        43114 => "Avalanche",
-        43113 => "Avalanche Fuji",
-        56 => "BSC",
-        _ => $"Unknown (Chain ID {chainId})"
-    };
+    private static string GetNetworkName(long chainId) => ChainlinkAddressRegistry.GetChainName(chainId);
 }
 
 /// <summary>

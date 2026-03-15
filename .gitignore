@@ -24,6 +24,7 @@ artifacts/
 *.db-wal
 
 ## Secrets
+secrets/
 appsettings.*.local.json
 *.pfx
 *.key

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
+using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Engine;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ public class ReputationServiceTests
     private readonly IAgentReputationRepository _reputationRepo;
     private readonly IAgentRepository _agentRepo;
     private readonly IAgentCapabilityRepository _capabilityRepo;
+    private readonly ICachedDataService _cachedData;
     private readonly ILogger<ReputationService> _logger;
     private readonly ReputationService _sut;
 
@@ -21,8 +23,9 @@ public class ReputationServiceTests
         _reputationRepo = Substitute.For<IAgentReputationRepository>();
         _agentRepo = Substitute.For<IAgentRepository>();
         _capabilityRepo = Substitute.For<IAgentCapabilityRepository>();
+        _cachedData = Substitute.For<ICachedDataService>();
         _logger = Substitute.For<ILogger<ReputationService>>();
-        _sut = new ReputationService(_reputationRepo, _agentRepo, _capabilityRepo, _logger);
+        _sut = new ReputationService(_reputationRepo, _agentRepo, _capabilityRepo, _cachedData, _logger);
     }
 
     [Fact]

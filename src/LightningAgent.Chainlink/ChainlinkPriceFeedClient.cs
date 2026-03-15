@@ -22,11 +22,14 @@ public class ChainlinkPriceFeedClient : IChainlinkPriceFeedClient
         _logger = logger;
     }
 
-    public async Task<PriceFeedData> GetLatestPriceAsync(string priceFeedAddress, CancellationToken ct = default)
+    public Task<PriceFeedData> GetLatestPriceAsync(string priceFeedAddress, CancellationToken ct = default)
+        => GetLatestPriceAsync(priceFeedAddress, _settings.EthereumRpcUrl, ct);
+
+    public async Task<PriceFeedData> GetLatestPriceAsync(string priceFeedAddress, string rpcUrl, CancellationToken ct = default)
     {
         _logger.LogInformation("Fetching latest price from feed {Address}", priceFeedAddress);
 
-        var web3 = new Web3(_settings.EthereumRpcUrl);
+        var web3 = new Web3(rpcUrl);
         var contract = web3.Eth.GetContract(PriceFeedAbi.Abi, priceFeedAddress);
 
         var latestRoundDataFunction = contract.GetFunction("latestRoundData");

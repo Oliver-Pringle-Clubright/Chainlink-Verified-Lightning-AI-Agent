@@ -186,6 +186,9 @@ public class MigrationRunner
         ");
 
         yield return ("2.0.0", "Add unique constraint on Escrows.MilestoneId for idempotency protection", @"
+            DELETE FROM Escrows WHERE rowid NOT IN (
+                SELECT MIN(rowid) FROM Escrows GROUP BY MilestoneId
+            );
             CREATE UNIQUE INDEX IF NOT EXISTS IX_Escrows_MilestoneId_Unique ON Escrows(MilestoneId);
         ");
     }

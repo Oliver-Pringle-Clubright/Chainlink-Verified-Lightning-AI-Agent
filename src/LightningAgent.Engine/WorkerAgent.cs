@@ -20,6 +20,8 @@ public class WorkerAgent
     private readonly TaskLifecycleWorkflow _lifecycle;
     private readonly ITaskOrchestrator _orchestrator;
     private readonly ILogger<WorkerAgent> _logger;
+    private readonly Dictionary<int, int> _milestoneRetries = new();
+    private const int MaxRetriesPerMilestone = 1;
 
     public WorkerAgent(
         IClaudeAiClient aiClient,
@@ -84,6 +86,10 @@ public class WorkerAgent
 
     private async Task ProcessTaskAsync(int agentId, Core.Models.TaskItem task, CancellationToken ct)
     {
+        _logger.LogInformation(
+            "WorkerAgent: processing task {TaskId} (ParentTaskId={ParentTaskId}, Status={Status})",
+            task.Id, task.ParentTaskId?.ToString() ?? "null", task.Status);
+
         // If task is still Assigned, move it to InProgress
         if (task.Status == TaskStatus.Assigned)
         {
@@ -104,7 +110,17 @@ public class WorkerAgent
                 task.Id);
 
             // Check if the task can be completed
-            await _orchestrator.CheckAndCompleteTaskAsync(task.Id, ct);
+            try { await _orchestrator.CheckAndCompleteTaskAsync(task.Id, ct); }
+            catch (Exception ex) { _logger.LogWarning(ex, "WorkerAgent: error checking completion for task {TaskId}", task.Id); }
+            if (task.ParentTaskId.HasValue)
+            {
+                try
+                {
+                    _logger.LogInformation("WorkerAgent: checking parent task {ParentTaskId} completion", task.ParentTaskId.Value);
+                    await _orchestrator.CheckAndCompleteTaskAsync(task.ParentTaskId.Value, ct);
+                }
+                catch (Exception ex) { _logger.LogWarning(ex, "WorkerAgent: error checking parent {ParentTaskId}", task.ParentTaskId.Value); }
+            }
             return;
         }
 
@@ -144,6 +160,32 @@ public class WorkerAgent
                 _logger.LogInformation(
                     "WorkerAgent: milestone {MilestoneId} (task {TaskId}) result: {Result}",
                     milestone.Id, task.Id, passed ? "PASSED" : "FAILED");
+
+                // 3g. Auto-retry once on verification failure
+                if (!passed)
+                {
+                    _milestoneRetries.TryGetValue(milestone.Id, out var retryCount);
+                    if (retryCount < MaxRetriesPerMilestone)
+                    {
+                        _milestoneRetries[milestone.Id] = retryCount + 1;
+                        _logger.LogInformation(
+                            "WorkerAgent: auto-retrying milestone {MilestoneId} (attempt {Attempt})",
+                            milestone.Id, retryCount + 1);
+
+                        await _lifecycle.ProcessRetryAsync(milestone.Id, ct);
+
+                        var retryPrompt = BuildPrompt(task, milestone)
+                            + "\n\n## IMPORTANT: Previous attempt failed verification. "
+                            + "Pay extra attention to the verification criteria and ensure all requirements are met precisely.";
+                        var retryOutput = await _aiClient.SendMessageAsync(systemPrompt, retryPrompt, ct);
+                        var retryBytes = Encoding.UTF8.GetBytes(retryOutput);
+
+                        var retryPassed = await _lifecycle.ProcessMilestoneSubmissionAsync(milestone.Id, retryBytes, ct);
+                        _logger.LogInformation(
+                            "WorkerAgent: milestone {MilestoneId} retry result: {Result}",
+                            milestone.Id, retryPassed ? "PASSED" : "FAILED");
+                    }
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -159,7 +201,30 @@ public class WorkerAgent
         }
 
         // 4. After processing all milestones, check if the task is complete
-        await _orchestrator.CheckAndCompleteTaskAsync(task.Id, ct);
+        try
+        {
+            await _orchestrator.CheckAndCompleteTaskAsync(task.Id, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "WorkerAgent: error checking completion for task {TaskId}", task.Id);
+        }
+
+        // 5. If this is a subtask, also check whether the parent task can now be completed
+        if (task.ParentTaskId.HasValue)
+        {
+            try
+            {
+                _logger.LogInformation(
+                    "WorkerAgent: checking parent task {ParentTaskId} completion (from subtask {TaskId})",
+                    task.ParentTaskId.Value, task.Id);
+                await _orchestrator.CheckAndCompleteTaskAsync(task.ParentTaskId.Value, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "WorkerAgent: error checking parent task {ParentTaskId} completion", task.ParentTaskId.Value);
+            }
+        }
     }
 
     private static string BuildPrompt(Core.Models.TaskItem task, Core.Models.Milestone milestone)

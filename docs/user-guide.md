@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 2.2.0**
+**Version 2.3.0**
 
 ## Table of Contents
 
@@ -2196,3 +2196,56 @@ Body: [1, 2, 3, 42]
 ```
 
 Returns the full `TaskDetailResponse` for each requested task ID in a single query.
+
+## 28. v2.3.0 — Multi-Chain Support, Viability Fixes, and Dashboard Overhaul
+
+### 28.1 Multi-Chain Support
+
+The app now supports **14 chains** with auto-detected Chainlink contract addresses:
+
+| Chain | Mainnet ID | Testnet ID | Functions | VRF | CCIP |
+|-------|-----------|-----------|-----------|-----|------|
+| Ethereum | 1 | 11155111 (Sepolia) | Yes | Yes | Yes |
+| Arbitrum | 42161 | 421614 | Yes | Yes | Yes |
+| Base | 8453 | 84532 | Yes | Yes | Yes |
+| Polygon | 137 | 80002 (Amoy) | Yes | Yes | Yes |
+| BNB Smart Chain | 56 | 97 | No | Yes | Yes |
+| Optimism | 10 | 11155420 | Yes | Yes | Yes |
+| Avalanche | 43114 | 43113 (Fuji) | Yes | Yes | Yes |
+
+**Auto-Detection**: Set your RPC URL to any supported chain. The app detects the chain ID via `eth_chainId` at startup and automatically loads the correct Chainlink contract addresses (price feeds, Functions router, VRF coordinator, CCIP router).
+
+**Multi-Chain Configuration** (connect to multiple chains simultaneously):
+```json
+"MultiChain": {
+  "Enabled": true,
+  "Chains": {
+    "Arbitrum": { "ChainId": 42161, "RpcUrl": "https://arb-mainnet.g.alchemy.com/v2/KEY" },
+    "Base": { "ChainId": 8453, "RpcUrl": "https://base-mainnet.g.alchemy.com/v2/KEY" },
+    "Polygon": { "ChainId": 137, "RpcUrl": "https://polygon-mainnet.g.alchemy.com/v2/KEY" },
+    "BNB": { "ChainId": 56, "RpcUrl": "https://bsc-dataseed.binance.org" }
+  }
+}
+```
+
+### 28.2 Enhanced Dashboard (9 tabs)
+
+New dashboard tabs added alongside existing Overview, Tasks, Create Task, Payments:
+- **Agents** — Register agents, view reputation, suspend
+- **Escrows** — Escrow stats, verification rates, open disputes
+- **System** — Service health, API key status, metrics, system stats
+- **Admin** — Backups, CSV exports, audit logs
+- **Live Events** — Real-time SignalR event stream
+
+**Role-based access**: Public tabs (Overview, Tasks, Create Task, Payments) are visible without login. Admin tabs require API key authentication via the login bar in the header.
+
+### 28.3 Task Lifecycle Fixes
+
+- **Parent task completion**: New `ParentTaskCompletionService` automatically completes parent tasks when all subtasks finish
+- **Auto-retry on verification failure**: Failed milestones get 1 automatic retry with an enhanced AI prompt
+- **Retry resets subtask status**: The retry endpoint now properly resets failed subtasks to InProgress
+- **Graceful LND degradation**: Escrow settlement and payment errors no longer block the verification workflow
+- **Direct payments**: When LND is unavailable, payments are recorded as settled directly
+- **Reputation cache invalidation**: Agent reputation updates are immediately visible via the API
+- **Verification threshold**: Lowered from 0.7 to 0.55 for more reasonable pass rates
+- **CoinGecko API fix**: Correct API key header selection (demo vs pro)

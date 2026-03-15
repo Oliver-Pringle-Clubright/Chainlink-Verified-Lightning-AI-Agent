@@ -61,7 +61,10 @@ public class CoinGeckoClient : ICoinGeckoClient
 
         if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Add("x-cg-pro-api-key", _settings.ApiKey);
+            var headerName = baseUri.Host.Contains("pro-api", StringComparison.OrdinalIgnoreCase)
+                ? "x-cg-pro-api-key"
+                : "x-cg-demo-api-key";
+            _httpClient.DefaultRequestHeaders.Add(headerName, _settings.ApiKey);
         }
     }
 

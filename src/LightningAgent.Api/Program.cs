@@ -1,4 +1,6 @@
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
@@ -73,6 +75,8 @@ if (escrowSettings is not null && !string.IsNullOrWhiteSpace(escrowSettings.Encr
 
 builder.Services.Configure<PricingSettings>(builder.Configuration.GetSection("Pricing"));
 builder.Services.Configure<CoinGeckoSettings>(builder.Configuration.GetSection("CoinGecko"));
+builder.Services.Configure<MultiChainSettings>(builder.Configuration.GetSection("MultiChain"));
+builder.Services.AddScoped<LightningAgent.Engine.Services.MultiChainPriceService>();
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
@@ -104,6 +108,70 @@ builder.Services.PostConfigure<ChainlinkSettings>(settings =>
     if (!string.IsNullOrEmpty(source.CcipRouterAddress)) settings.CcipRouterAddress = source.CcipRouterAddress;
     if (source.CcipSourceChainSelector != 0) settings.CcipSourceChainSelector = source.CcipSourceChainSelector;
 });
+
+// ── Auto-detect chain ID and fill Chainlink addresses from registry ──
+// Detect chain ID from RPC early so PostConfigure can use it
+long? detectedChainId = null;
+{
+    var networkSettings = builder.Configuration.GetSection("Network").Get<NetworkSettings>() ?? new NetworkSettings();
+    var chainlinkSection = builder.Configuration.GetSection("Chainlink");
+    var rpcUrl = networkSettings.IsTest
+        ? chainlinkSection["Testnet:EthereumRpcUrl"]
+        : chainlinkSection["Mainnet:EthereumRpcUrl"];
+    if (string.IsNullOrWhiteSpace(rpcUrl))
+        rpcUrl = chainlinkSection["EthereumRpcUrl"];
+
+    if (!string.IsNullOrWhiteSpace(rpcUrl))
+    {
+        try
+        {
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var request = new { jsonrpc = "2.0", method = "eth_chainId", @params = Array.Empty<object>(), id = 1 };
+            var response = await httpClient.PostAsJsonAsync(rpcUrl, request);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                if (json.TryGetProperty("result", out var resultProp))
+                {
+                    detectedChainId = Convert.ToInt64(resultProp.GetString(), 16);
+                }
+            }
+        }
+        catch { /* Chain detection is best-effort */ }
+    }
+}
+
+if (detectedChainId.HasValue)
+{
+    var chainId = detectedChainId.Value;
+    builder.Services.PostConfigure<ChainlinkSettings>(settings =>
+    {
+        var defaults = ChainlinkAddressRegistry.GetDefaults(chainId);
+        if (defaults is null) return;
+
+        // Apply registry defaults to any empty fields in the resolved settings
+        if (string.IsNullOrEmpty(settings.EthUsdPriceFeedAddress) && !string.IsNullOrEmpty(defaults.EthUsdPriceFeedAddress))
+            settings.EthUsdPriceFeedAddress = defaults.EthUsdPriceFeedAddress;
+        if (string.IsNullOrEmpty(settings.BtcUsdPriceFeedAddress) && !string.IsNullOrEmpty(defaults.BtcUsdPriceFeedAddress))
+            settings.BtcUsdPriceFeedAddress = defaults.BtcUsdPriceFeedAddress;
+        if (string.IsNullOrEmpty(settings.LinkUsdPriceFeedAddress) && !string.IsNullOrEmpty(defaults.LinkUsdPriceFeedAddress))
+            settings.LinkUsdPriceFeedAddress = defaults.LinkUsdPriceFeedAddress;
+        if (string.IsNullOrEmpty(settings.LinkEthPriceFeedAddress) && !string.IsNullOrEmpty(defaults.LinkEthPriceFeedAddress))
+            settings.LinkEthPriceFeedAddress = defaults.LinkEthPriceFeedAddress;
+        if (string.IsNullOrEmpty(settings.FunctionsRouterAddress) && !string.IsNullOrEmpty(defaults.FunctionsRouterAddress))
+            settings.FunctionsRouterAddress = defaults.FunctionsRouterAddress;
+        if (string.IsNullOrEmpty(settings.VrfCoordinatorAddress) && !string.IsNullOrEmpty(defaults.VrfCoordinatorAddress))
+            settings.VrfCoordinatorAddress = defaults.VrfCoordinatorAddress;
+        if (string.IsNullOrEmpty(settings.AutomationRegistryAddress) && !string.IsNullOrEmpty(defaults.AutomationRegistryAddress))
+            settings.AutomationRegistryAddress = defaults.AutomationRegistryAddress;
+        if (string.IsNullOrEmpty(settings.CcipRouterAddress) && !string.IsNullOrEmpty(defaults.CcipRouterAddress))
+            settings.CcipRouterAddress = defaults.CcipRouterAddress;
+        if (settings.CcipSourceChainSelector == 0 && defaults.CcipSourceChainSelector != 0)
+            settings.CcipSourceChainSelector = defaults.CcipSourceChainSelector;
+        if (string.IsNullOrEmpty(settings.DonId) && !string.IsNullOrEmpty(defaults.DonId))
+            settings.DonId = defaults.DonId;
+    });
+}
 
 builder.Services.PostConfigure<LightningSettings>(settings =>
 {
@@ -233,6 +301,7 @@ builder.Services.AddHostedService<InvoiceStatusPoller>();
 builder.Services.AddHostedService<SecretRotationService>();
 builder.Services.AddHostedService<DataCleanupService>();
 builder.Services.AddHostedService<StaleTaskReassigner>();
+builder.Services.AddHostedService<ParentTaskCompletionService>();
 builder.Services.AddHostedService<AutomatedBackupService>();
 builder.Services.AddHostedService<CcipMessagePoller>();
 builder.Services.AddScoped<CcipBridgeService>();
@@ -374,7 +443,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-XSS-Protection"] = "0"; // Modern best practice: disable legacy filter, rely on CSP
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:; img-src 'self' data:;";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:; img-src 'self' data:;";
     await next();
 });
 

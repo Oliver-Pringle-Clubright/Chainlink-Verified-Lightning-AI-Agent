@@ -225,6 +225,8 @@ public class CcipBridgeService
                 RouterAddress = "0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93" },
         new() { ChainSelector = 9284632837123596123, Name = "Polygon Amoy", NetworkType = "Testnet",
                 RouterAddress = "0x9C32fCB86BF0f4a1A8921a9Fe46de3198bb884B2" },
+        new() { ChainSelector = 13264668187771770619, Name = "BNB Testnet", NetworkType = "Testnet",
+                RouterAddress = "0xE1053aE1857476f36A3C62580FF9b016E8EE8F6f" },
         // Mainnet lanes
         new() { ChainSelector = 5009297550715157269, Name = "Ethereum Mainnet", NetworkType = "Mainnet",
                 RouterAddress = "0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D" },
@@ -234,6 +236,10 @@ public class CcipBridgeService
                 RouterAddress = "0x3206695CaE29952f4b0c22a169725a865bc43287" },
         new() { ChainSelector = 15971525489660198786, Name = "Base", NetworkType = "Mainnet",
                 RouterAddress = "0x881e3A65B4d4a04310c13bF528eE38c8c0344527" },
+        new() { ChainSelector = 11344663589394136015, Name = "BNB Smart Chain", NetworkType = "Mainnet",
+                RouterAddress = "0x34B03Cb9086d7D758AC55af71584F81A598759FE" },
+        new() { ChainSelector = 4051577828743386545, Name = "Polygon", NetworkType = "Mainnet",
+                RouterAddress = "0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe" },
     ];
 
     private string FeeTokenAddress() =>

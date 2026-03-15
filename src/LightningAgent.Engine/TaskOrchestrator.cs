@@ -242,9 +242,16 @@ public class TaskOrchestrator : ITaskOrchestrator
             return false;
         }
 
-        // Already in a terminal state
+        // Already in a terminal state — but still propagate to parent
         if (task.Status is TaskStatus.Completed or TaskStatus.Failed)
         {
+            if (task.ParentTaskId.HasValue)
+            {
+                _logger.LogInformation(
+                    "Task {TaskId} already {Status} - checking parent {ParentTaskId}",
+                    taskId, task.Status, task.ParentTaskId.Value);
+                await CheckAndCompleteTaskAsync(task.ParentTaskId.Value, ct);
+            }
             return true;
         }
 
@@ -301,6 +308,15 @@ public class TaskOrchestrator : ITaskOrchestrator
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to assemble deliverable for task {TaskId}", taskId);
+            }
+
+            // If this is a subtask, also check whether the parent task can now be completed
+            if (task.ParentTaskId.HasValue)
+            {
+                _logger.LogInformation(
+                    "Subtask {TaskId} completed - checking parent task {ParentTaskId}",
+                    taskId, task.ParentTaskId.Value);
+                await CheckAndCompleteTaskAsync(task.ParentTaskId.Value, ct);
             }
 
             return true;

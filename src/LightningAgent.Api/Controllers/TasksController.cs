@@ -503,8 +503,9 @@ public class TasksController : ControllerBase
         foreach (var subtask in subtasks)
         {
             var milestones = await _milestoneRepository.GetByTaskIdAsync(subtask.Id, ct);
+            var failedMilestones = milestones.Where(m => m.Status == MilestoneStatus.Failed).ToList();
 
-            foreach (var milestone in milestones.Where(m => m.Status == MilestoneStatus.Failed))
+            foreach (var milestone in failedMilestones)
             {
                 _logger.LogInformation(
                     "Retrying failed milestone {MilestoneId} for subtask {SubtaskId} of task {TaskId}",
@@ -512,6 +513,12 @@ public class TasksController : ControllerBase
 
                 await _workflow.ProcessRetryAsync(milestone.Id, ct);
                 retriedCount++;
+            }
+
+            // Reset the subtask status so the WorkerAgent picks it up again
+            if (failedMilestones.Count > 0 && subtask.Status == TaskStatus.Failed)
+            {
+                await _taskRepository.UpdateStatusAsync(subtask.Id, TaskStatus.InProgress, ct);
             }
         }
 

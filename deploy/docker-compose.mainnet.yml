@@ -1,0 +1,50 @@
+name: lightningagent-mainnet
+
+services:
+  lightningagent-api:
+    container_name: lightningagent-api
+    build:
+      context: ..
+      dockerfile: src/LightningAgent.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env.mainnet
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__Sqlite=Data Source=/app/data/lightningagent.db;Cache=Shared
+      # ── Secrets (from .env.mainnet) ──
+      - ClaudeAi__ApiKey=${CLAUDE_API_KEY}
+      - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
+      - Chainlink__Mainnet__EthereumRpcUrl=${ETH_MAINNET_RPC_URL}
+      - Chainlink__PrivateKeyPath=/app/secrets/eth-private-key
+      - Chainlink__Mainnet__FunctionsSubscriptionId=${CHAINLINK_FUNCTIONS_SUB_ID:-}
+      - Chainlink__Mainnet__VrfSubscriptionId=${CHAINLINK_VRF_SUB_ID:-}
+      - Chainlink__Mainnet__DonId=${CHAINLINK_DON_ID:-fun-ethereum-mainnet-1}
+      - Chainlink__Mainnet__VrfConsumerAddress=${VRF_CONSUMER_ADDRESS:-}
+      # ── Lightning (external LND node) ──
+      - Lightning__Mainnet__LndRestUrl=${LND_REST_URL}
+      - Lightning__Mainnet__MacaroonPath=/app/lnd/admin.macaroon
+      - Lightning__Mainnet__TlsCertPath=/app/lnd/tls.cert
+      # ── Network mode ──
+      - Network__IsTest=false
+      # ── Security ──
+      - ApiSecurity__ApiKey=${API_KEY}
+      - ApiSecurity__DevMode=false
+      - Jwt__Secret=${JWT_SECRET}
+      - Escrow__EncryptionKey=${ESCROW_ENCRYPTION_KEY}
+      # ── CORS ──
+      - Cors__AllowedOrigins__0=${CORS_ORIGIN:-https://your-domain.com}
+    volumes:
+      - agent-data:/app/data
+      - ${LND_DIR:-./.lnd}:/app/lnd:ro
+      - ${ETH_KEY_DIR:-./.eth-keys}:/app/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  agent-data:

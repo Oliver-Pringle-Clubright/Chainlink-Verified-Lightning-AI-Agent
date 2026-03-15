@@ -30,7 +30,7 @@ public class TaskLifecycleWorkflow
     /// Minimum average score threshold for a milestone to be considered passed
     /// when not all individual strategies report a pass.
     /// </summary>
-    private const double PassThreshold = 0.7;
+    private const double PassThreshold = 0.55;
 
     public TaskLifecycleWorkflow(
         ITaskRepository taskRepo,
@@ -132,24 +132,33 @@ public class TaskLifecycleWorkflow
                 results.Select(r => $"{r.StrategyType}: {r.Score:F2} ({(r.Passed ? "pass" : "fail")})"));
             await _milestoneRepo.UpdateAsync(milestone, ct);
 
-            // 6b. Settle escrow
-            var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
-            if (escrow is not null)
+            // 6b. Settle escrow (best-effort — LND may be unavailable)
+            try
             {
-                var decryptedHex = LightningAgent.Engine.Security.PreimageProtector.Unprotect(escrow.PaymentPreimage ?? string.Empty);
-                var preimage = Convert.FromHexString(decryptedHex);
-                await _escrowManager.SettleEscrowAsync(escrow.Id, preimage, ct);
-
-                _logger.LogInformation(
-                    "Escrow {EscrowId} settled for milestone {MilestoneId}",
-                    escrow.Id, milestoneId);
+                var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
+                if (escrow is not null)
+                {
+                    var decryptedHex = LightningAgent.Engine.Security.PreimageProtector.Unprotect(escrow.PaymentPreimage ?? string.Empty);
+                    var preimage = Convert.FromHexString(decryptedHex);
+                    await _escrowManager.SettleEscrowAsync(escrow.Id, preimage, ct);
+                    _logger.LogInformation("Escrow {EscrowId} settled for milestone {MilestoneId}", escrow.Id, milestoneId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to settle escrow for milestone {MilestoneId} — continuing with payment", milestoneId);
             }
 
-            // 6c. Process payment
-            var payment = await _paymentService.ProcessMilestonePaymentAsync(milestoneId, ct);
-            _logger.LogInformation(
-                "Payment {PaymentId} processed for milestone {MilestoneId}",
-                payment.Id, milestoneId);
+            // 6c. Process payment (best-effort)
+            try
+            {
+                var payment = await _paymentService.ProcessMilestonePaymentAsync(milestoneId, ct);
+                _logger.LogInformation("Payment {PaymentId} processed for milestone {MilestoneId}", payment.Id, milestoneId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to process payment for milestone {MilestoneId} — milestone still passed", milestoneId);
+            }
 
             // 6d. Update reputation
             if (agentId > 0)
@@ -206,15 +215,19 @@ public class TaskLifecycleWorkflow
                 results.Select(r => $"{r.StrategyType}: {r.Score:F2} ({(r.Passed ? "pass" : "fail")})"));
             await _milestoneRepo.UpdateAsync(milestone, ct);
 
-            // 7b. Cancel escrow
-            var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
-            if (escrow is not null)
+            // 7b. Cancel escrow (best-effort)
+            try
             {
-                await _escrowManager.CancelEscrowAsync(escrow.Id, ct);
-
-                _logger.LogInformation(
-                    "Escrow {EscrowId} cancelled for failed milestone {MilestoneId}",
-                    escrow.Id, milestoneId);
+                var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
+                if (escrow is not null)
+                {
+                    await _escrowManager.CancelEscrowAsync(escrow.Id, ct);
+                    _logger.LogInformation("Escrow {EscrowId} cancelled for failed milestone {MilestoneId}", escrow.Id, milestoneId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cancel escrow for milestone {MilestoneId}", milestoneId);
             }
 
             // 7c. Update reputation

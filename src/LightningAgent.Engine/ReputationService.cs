@@ -11,17 +11,20 @@ public class ReputationService : IReputationService
     private readonly IAgentReputationRepository _reputationRepo;
     private readonly IAgentRepository _agentRepo;
     private readonly IAgentCapabilityRepository _capabilityRepo;
+    private readonly ICachedDataService _cachedData;
     private readonly ILogger<ReputationService> _logger;
 
     public ReputationService(
         IAgentReputationRepository reputationRepo,
         IAgentRepository agentRepo,
         IAgentCapabilityRepository capabilityRepo,
+        ICachedDataService cachedData,
         ILogger<ReputationService> logger)
     {
         _reputationRepo = reputationRepo;
         _agentRepo = agentRepo;
         _capabilityRepo = capabilityRepo;
+        _cachedData = cachedData;
         _logger = logger;
     }
 
@@ -104,6 +107,7 @@ public class ReputationService : IReputationService
         reputation.LastUpdated = DateTime.UtcNow;
 
         await _reputationRepo.UpdateAsync(reputation, ct);
+        _cachedData.InvalidateAgent(agentId);
 
         _logger.LogInformation(
             "Updated reputation for agent {AgentId}: Score={Score:F3}, TotalTasks={TotalTasks}",

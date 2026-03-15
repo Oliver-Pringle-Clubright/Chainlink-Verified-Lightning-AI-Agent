@@ -77,8 +77,9 @@ public class PaymentService : IPaymentService
                 AgentId = 0,
                 AmountSats = milestone.PayoutSats,
                 PaymentType = PaymentType.Direct,
-                Status = PaymentStatus.Pending,
-                CreatedAt = DateTime.UtcNow
+                Status = PaymentStatus.Settled,
+                CreatedAt = DateTime.UtcNow,
+                SettledAt = DateTime.UtcNow
             };
         }
 

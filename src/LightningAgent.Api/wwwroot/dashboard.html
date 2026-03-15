@@ -81,13 +81,14 @@
             box-shadow: 0 0 6px var(--green);
         }
 
-        /* ── Navigation Tabs ──────────────────────────────────────── */
+        /* -- Navigation Tabs ------------------------------------------ */
         .nav-tabs {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
             display: flex;
             gap: 0;
             padding: 0 24px;
+            overflow-x: auto;
         }
 
         .nav-tab {
@@ -103,6 +104,7 @@
             border-left: none;
             border-right: none;
             font-family: inherit;
+            white-space: nowrap;
         }
 
         .nav-tab:hover { color: var(--text); }
@@ -228,6 +230,8 @@
         .badge-expired { background: var(--yellow-bg); color: var(--yellow); }
         .badge-inflight { background: var(--blue-bg); color: var(--blue); }
         .badge-streaming, .badge-escrow, .badge-direct { background: var(--accent-glow); color: var(--accent); }
+        .badge-chainlink { background: var(--blue-bg); color: var(--blue); }
+        .badge-coingecko { background: var(--green-bg); color: var(--green); }
 
         .score-bar {
             width: 60px;
@@ -243,6 +247,23 @@
         .score-bar .fill {
             height: 100%;
             border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+
+        .score-bar-wide {
+            width: 120px;
+            height: 10px;
+            background: var(--surface2);
+            border-radius: 5px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .score-bar-wide .fill {
+            height: 100%;
+            border-radius: 5px;
             transition: width 0.4s ease;
         }
 
@@ -316,7 +337,7 @@
 
         .timeline-bar:hover .tooltip { display: block; }
 
-        /* ── Forms ────────────────────────────────────────────────── */
+        /* -- Forms ---------------------------------------------------- */
         .form-group {
             margin-bottom: 16px;
         }
@@ -391,6 +412,27 @@
 
         .btn-secondary:hover { background: var(--border); }
 
+        .btn-danger {
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .btn-success {
+            background: var(--green-bg);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-success:hover { background: rgba(34, 197, 94, 0.25); }
+
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 12px;
+        }
+
         .form-feedback {
             margin-top: 12px;
             padding: 10px 14px;
@@ -413,7 +455,7 @@
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
-        /* ── Search Bar ───────────────────────────────────────────── */
+        /* -- Search Bar ----------------------------------------------- */
         .search-bar {
             display: flex;
             gap: 10px;
@@ -448,7 +490,7 @@
         .clickable { cursor: pointer; }
         .clickable:hover { text-decoration: underline; color: var(--accent); }
 
-        /* ── Task Detail Panel ────────────────────────────────────── */
+        /* -- Task Detail Panel ---------------------------------------- */
         .detail-panel {
             display: none;
             margin-top: 16px;
@@ -482,12 +524,136 @@
             align-items: center;
             font-size: 13px;
         }
+
+        /* -- New: Health Indicator Dots ------------------------------- */
+        .health-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .health-dot.healthy { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .health-dot.unhealthy { background: var(--red); box-shadow: 0 0 6px var(--red); }
+        .health-dot.degraded { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+        /* -- New: API Key Highlight Box ------------------------------- */
+        .api-key-box {
+            margin-top: 12px;
+            padding: 14px 18px;
+            background: var(--yellow-bg);
+            border: 1px solid rgba(234, 179, 8, 0.4);
+            border-radius: 8px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            position: relative;
+        }
+
+        .api-key-box .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 10px;
+            font-size: 11px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .api-key-box .copy-btn:hover { background: var(--border); }
+
+        .api-key-warning {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--yellow);
+            font-weight: 600;
+        }
+
+        /* -- New: Section spacing ------------------------------------- */
+        .section { margin-bottom: 24px; }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-header h2 { margin-bottom: 0; }
+
+        /* -- New: Metric grid ----------------------------------------- */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .metric-item {
+            background: var(--surface2);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .metric-item .metric-value {
+            font-size: 22px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-item .metric-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        /* -- New: Percentage bar -------------------------------------- */
+        .pct-bar {
+            width: 100%;
+            height: 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .pct-bar .pct-fill {
+            height: 100%;
+            border-radius: 6px;
+            background: var(--green);
+            transition: width 0.4s ease;
+        }
+
+        /* -- New: Export button row ----------------------------------- */
+        .export-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1><span class="lightning">&#9889;</span> Lightning Agent Dashboard</h1>
         <div class="header-right">
+            <div id="authSection" style="display:flex;align-items:center;gap:10px;">
+                <div id="authLoggedOut" style="display:flex;align-items:center;gap:8px;">
+                    <input type="password" id="apiKeyInput" placeholder="API Key" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;" />
+                    <button onclick="doLogin()" class="btn btn-primary" style="padding:6px 14px;font-size:12px;">Login</button>
+                </div>
+                <div id="authLoggedIn" style="display:none;align-items:center;gap:8px;">
+                    <span style="font-size:12px;color:var(--green);">Admin</span>
+                    <button onclick="doLogout()" class="btn btn-secondary" style="padding:4px 10px;font-size:11px;">Logout</button>
+                </div>
+            </div>
             <div class="connection-status">
                 <div class="status-dot" id="connectionDot"></div>
                 <span id="connectionText">Connecting...</span>
@@ -501,7 +667,11 @@
         <button class="nav-tab" data-tab="tasks">Tasks</button>
         <button class="nav-tab" data-tab="create">Create Task</button>
         <button class="nav-tab" data-tab="payments">Payments</button>
-        <button class="nav-tab" data-tab="events">Live Events</button>
+        <button class="nav-tab admin-only" data-tab="agents" style="display:none;">Agents</button>
+        <button class="nav-tab admin-only" data-tab="escrows" style="display:none;">Escrows</button>
+        <button class="nav-tab admin-only" data-tab="system" style="display:none;">System</button>
+        <button class="nav-tab admin-only" data-tab="admin" style="display:none;">Admin</button>
+        <button class="nav-tab admin-only" data-tab="events" style="display:none;">Live Events</button>
     </div>
 
     <!-- ═══ OVERVIEW TAB ═══════════════════════════════════════════ -->
@@ -540,6 +710,22 @@
                 <h2>Task Activity (30 days)</h2>
                 <div class="timeline-chart" id="timelineChart">
                     <div class="empty-state">Loading timeline...</div>
+                </div>
+            </div>
+
+            <!-- Live Prices Section -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="section-header">
+                    <h2>Live Prices</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshPrices()">Refresh Prices</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr><th>Pair</th><th>Price (USD)</th><th>Source</th><th>Fetched At</th></tr></thead>
+                        <tbody id="pricesTableBody">
+                            <tr><td colspan="4" class="empty-state">Loading prices...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -613,6 +799,7 @@
             <div class="card detail-panel" id="taskDetailPanel">
                 <h2>Task Details</h2>
                 <div class="detail-grid" id="taskDetailGrid"></div>
+                <div id="taskRetrySection"></div>
                 <div class="milestone-list" id="milestoneList"></div>
             </div>
         </div>
@@ -636,10 +823,10 @@
                         <div class="form-group">
                             <label for="taskType">Task Type</label>
                             <select id="taskType" required>
-                                <option value="CodeGeneration">Code Generation</option>
-                                <option value="DataAnalysis">Data Analysis</option>
-                                <option value="TextWriting">Text Writing</option>
-                                <option value="ImageGeneration">Image Generation</option>
+                                <option value="Code">Code</option>
+                                <option value="Data">Data</option>
+                                <option value="Text">Text</option>
+                                <option value="Image">Image</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -703,6 +890,201 @@
         </div>
     </div>
 
+    <!-- ═══ AGENTS TAB ═══════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-agents">
+        <div class="container">
+            <!-- Agent List -->
+            <div class="card section">
+                <h2>Agent List</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Wallet Pubkey</th><th>Actions</th></tr></thead>
+                        <tbody id="agentListBody">
+                            <tr><td colspan="5" class="empty-state">Loading agents...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Agent Detail Panel -->
+            <div class="card detail-panel" id="agentDetailPanel">
+                <h2>Agent Details</h2>
+                <div id="agentDetailContent"></div>
+            </div>
+
+            <!-- Register Agent -->
+            <div class="card" style="max-width: 700px;">
+                <h2>Register New Agent</h2>
+                <form id="registerAgentForm" onsubmit="return registerAgent(event)">
+                    <div class="form-group">
+                        <label for="agentName">Name (required)</label>
+                        <input type="text" id="agentName" placeholder="Agent name" required maxlength="200" />
+                    </div>
+                    <div class="form-group">
+                        <label for="agentWallet">Wallet Pubkey (optional)</label>
+                        <input type="text" id="agentWallet" placeholder="Lightning wallet public key" maxlength="200" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="registerAgentBtn">Register Agent</button>
+                    <div class="form-feedback" id="registerAgentFeedback"></div>
+                    <div id="agentApiKeyResult"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ ESCROWS TAB ══════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-escrows">
+        <div class="container">
+            <!-- Escrow Stats -->
+            <div class="card section">
+                <h2>Escrow Overview</h2>
+                <div class="metric-grid" id="escrowStatsGrid">
+                    <div class="metric-item"><div class="metric-value" id="escrowStatsHeld">--</div><div class="metric-label">Held</div></div>
+                    <div class="metric-item"><div class="metric-value" id="escrowStatsSettled">--</div><div class="metric-label">Settled</div></div>
+                    <div class="metric-item"><div class="metric-value" id="escrowStatsCancelled">--</div><div class="metric-label">Cancelled</div></div>
+                    <div class="metric-item"><div class="metric-value sats" id="escrowStatsAmount">--</div><div class="metric-label">Held Amount (sats)</div></div>
+                </div>
+            </div>
+
+            <!-- Verification Stats -->
+            <div class="card section">
+                <h2>Verification Stats</h2>
+                <div class="metric-grid" id="verificationStatsGrid">
+                    <div class="metric-item"><div class="metric-value" id="verifyTotal">--</div><div class="metric-label">Total</div></div>
+                    <div class="metric-item"><div class="metric-value" style="color: var(--green)" id="verifyPassed">--</div><div class="metric-label">Passed</div></div>
+                    <div class="metric-item"><div class="metric-value" style="color: var(--red)" id="verifyFailed">--</div><div class="metric-label">Failed</div></div>
+                </div>
+                <div style="padding: 0 4px;">
+                    <span style="font-size: 12px; color: var(--text-dim);">Pass Rate: <strong id="verifyPassRateText">--</strong></span>
+                    <div class="pct-bar"><div class="pct-fill" id="verifyPassRateBar" style="width: 0%;"></div></div>
+                </div>
+            </div>
+
+            <!-- Open Dispute -->
+            <div class="card" style="max-width: 700px;">
+                <h2>Open Dispute</h2>
+                <form id="openDisputeForm" onsubmit="return openDispute(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="disputeTaskId">Task ID</label>
+                            <input type="number" id="disputeTaskId" placeholder="Task ID" required min="1" />
+                        </div>
+                        <div class="form-group">
+                            <label for="disputeReason">Reason</label>
+                            <input type="text" id="disputeReason" placeholder="Reason for dispute" required maxlength="500" />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-sm" id="openDisputeBtn">Open Dispute</button>
+                    <div class="form-feedback" id="disputeFeedback"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SYSTEM TAB ═══════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-system">
+        <div class="container">
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                <button class="btn btn-primary btn-sm" onclick="loadSystemData()">Refresh All</button>
+            </div>
+
+            <!-- Service Health -->
+            <div class="card section">
+                <h2>Service Health</h2>
+                <div id="serviceHealthContent">
+                    <div class="empty-state">Loading service health...</div>
+                </div>
+            </div>
+
+            <!-- Detailed Health -->
+            <div class="card section">
+                <h2>Detailed Health Checks</h2>
+                <div id="detailedHealthContent">
+                    <div class="empty-state">Loading health checks...</div>
+                </div>
+            </div>
+
+            <!-- API Key Status -->
+            <div class="card section">
+                <h2>API Key Status</h2>
+                <div id="apiKeyStatusContent">
+                    <div class="empty-state">Loading API key status...</div>
+                </div>
+            </div>
+
+            <!-- App Metrics -->
+            <div class="card section">
+                <h2>Application Metrics</h2>
+                <div class="metric-grid" id="appMetricsGrid">
+                    <div class="metric-item"><div class="metric-value" id="metricTasksCreated">--</div><div class="metric-label">Tasks Created</div></div>
+                    <div class="metric-item"><div class="metric-value" id="metricTasksCompleted">--</div><div class="metric-label">Tasks Completed</div></div>
+                    <div class="metric-item"><div class="metric-value" id="metricApiRequests">--</div><div class="metric-label">API Requests</div></div>
+                    <div class="metric-item"><div class="metric-value" id="metricApiErrors">--</div><div class="metric-label">5xx Errors</div></div>
+                    <div class="metric-item"><div class="metric-value" id="metricQueueDepth">--</div><div class="metric-label">Queue Depth</div></div>
+                    <div class="metric-item"><div class="metric-value" id="metricAvgDuration">--</div><div class="metric-label">Avg Request (ms)</div></div>
+                </div>
+            </div>
+
+            <!-- System Stats -->
+            <div class="card section">
+                <h2>System Stats</h2>
+                <div id="systemStatsContent">
+                    <div class="empty-state">Loading system stats...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ ADMIN TAB ════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-admin">
+        <div class="container">
+            <!-- Backups -->
+            <div class="card section">
+                <div class="section-header">
+                    <h2>Backups</h2>
+                    <button class="btn btn-primary btn-sm" onclick="createBackup()">Create Backup</button>
+                </div>
+                <div class="form-feedback" id="backupFeedback"></div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr><th>File Name</th><th>Size</th><th>Created At</th></tr></thead>
+                        <tbody id="backupListBody">
+                            <tr><td colspan="3" class="empty-state">Loading backups...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Exports -->
+            <div class="card section">
+                <h2>Export Data</h2>
+                <div class="export-row">
+                    <button class="btn btn-secondary" onclick="downloadExport('tasks')">Export Tasks (CSV)</button>
+                    <button class="btn btn-secondary" onclick="downloadExport('payments')">Export Payments (CSV)</button>
+                    <button class="btn btn-secondary" onclick="downloadExport('agents')">Export Agents (CSV)</button>
+                    <button class="btn btn-secondary" onclick="downloadExport('audit')">Export Audit (CSV)</button>
+                </div>
+            </div>
+
+            <!-- Audit Log -->
+            <div class="card section">
+                <h2>Audit Log</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead><tr><th>Event Type</th><th>Entity Type</th><th>Details</th><th>Created At</th></tr></thead>
+                        <tbody id="auditLogBody">
+                            <tr><td colspan="4" class="empty-state">Loading audit log...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+                    <button class="btn btn-secondary" id="auditPrevBtn" onclick="auditPage(-1)" style="display:none;">Prev</button>
+                    <button class="btn btn-secondary" id="auditNextBtn" onclick="auditPage(1)" style="display:none;">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ EVENTS TAB ════════════════════════════════════════════ -->
     <div class="tab-content" id="tab-events">
         <div class="container">
@@ -716,11 +1098,11 @@
     </div>
 
     <script>
-        // ── Configuration ──────────────────────────────────────────────
+        // -- Configuration ------------------------------------------------
         var API_BASE = window.location.origin;
         var REFRESH_INTERVAL = 15000;
 
-        // ── Helpers ────────────────────────────────────────────────────
+        // -- Helpers ------------------------------------------------------
         function formatSats(sats) {
             if (sats === null || sats === undefined) return '0';
             return Number(sats).toLocaleString();
@@ -788,7 +1170,28 @@
             return div.innerHTML;
         }
 
-        // ── Tab Navigation ─────────────────────────────────────────────
+        function formatBytes(bytes) {
+            if (bytes === null || bytes === undefined) return '--';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function truncate(str, len) {
+            if (!str) return '';
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+
+        function formatPrice(price) {
+            if (price === null || price === undefined) return '--';
+            return '$' + Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function errorHtml(detail) {
+            return '<div class="empty-state" style="color: var(--red);">Failed to load: ' + escapeHtml(detail || 'Unknown error') + '</div>';
+        }
+
+        // -- Tab Navigation -----------------------------------------------
         document.querySelectorAll('.nav-tab').forEach(function(tab) {
             tab.addEventListener('click', function() {
                 document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
@@ -798,10 +1201,14 @@
 
                 if (tab.dataset.tab === 'tasks') searchTasks();
                 if (tab.dataset.tab === 'payments') loadPayments();
+                if (tab.dataset.tab === 'agents') loadAgentList();
+                if (tab.dataset.tab === 'escrows') loadEscrowData();
+                if (tab.dataset.tab === 'system') loadSystemData();
+                if (tab.dataset.tab === 'admin') loadAdminData();
             });
         });
 
-        // ── Overview Data Loading ──────────────────────────────────────
+        // -- Overview Data Loading ----------------------------------------
         async function loadSummary() {
             var data = await apiFetch('/api/analytics/summary');
             if (data._error) return;
@@ -815,9 +1222,12 @@
 
         async function loadRecentTasks() {
             var data = await apiFetch('/api/tasks?page=1&pageSize=10');
-            if (data._error || !data.items) return;
             var tbody = document.getElementById('tasksTableBody');
-            if (data.items.length === 0) {
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="5">' + errorHtml(data.detail) + '</td></tr>';
+                return;
+            }
+            if (!data.items || data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No tasks found</td></tr>';
                 return;
             }
@@ -834,8 +1244,11 @@
 
         async function loadAgents() {
             var data = await apiFetch('/api/analytics/agents');
-            if (data._error) return;
             var tbody = document.getElementById('agentsTableBody');
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="5">' + errorHtml(data.detail) + '</td></tr>';
+                return;
+            }
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents found</td></tr>';
                 return;
@@ -865,7 +1278,40 @@
             }).join('');
         }
 
-        // ── Tasks Search ───────────────────────────────────────────────
+        // -- Live Prices --------------------------------------------------
+        async function loadPrices() {
+            var data = await apiFetch('/api/pricing/all');
+            var tbody = document.getElementById('pricesTableBody');
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="4">' + errorHtml(data.detail) + '</td></tr>';
+                return;
+            }
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No price data available</td></tr>';
+                return;
+            }
+            var items = Array.isArray(data) ? data : (data.items || [data]);
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No price data available</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(function(p) {
+                var srcCls = (p.source || '').toLowerCase() === 'chainlink' ? 'badge-chainlink' : 'badge-coingecko';
+                return '<tr>' +
+                    '<td>' + escapeHtml(p.pair || '') + '</td>' +
+                    '<td>' + formatPrice(p.priceUsd) + '</td>' +
+                    '<td><span class="badge ' + srcCls + '">' + escapeHtml(p.source || '') + '</span></td>' +
+                    '<td>' + formatDateTime(p.fetchedAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        async function refreshPrices() {
+            await apiFetch('/api/pricing/coingecko/refresh', { method: 'POST' });
+            await loadPrices();
+        }
+
+        // -- Tasks Search -------------------------------------------------
         var searchState = { page: 1, pageSize: 20, query: '', status: '' };
 
         async function searchTasks() {
@@ -896,7 +1342,15 @@
             var data = await apiFetch(url);
             var tbody = document.getElementById('searchResultsBody');
 
-            if (data._error || !data.items || data.items.length === 0) {
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="7">' + errorHtml(data.detail) + '</td></tr>';
+                document.getElementById('searchResultCount').textContent = '';
+                document.getElementById('searchPrevBtn').style.display = 'none';
+                document.getElementById('searchNextBtn').style.display = 'none';
+                return;
+            }
+
+            if (!data.items || data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No tasks found</td></tr>';
                 document.getElementById('searchResultCount').textContent = '';
                 document.getElementById('searchPrevBtn').style.display = 'none';
@@ -926,7 +1380,11 @@
 
         async function showTaskDetail(taskId) {
             var data = await apiFetch('/api/tasks/' + taskId);
-            if (data._error) return;
+            if (data._error) {
+                document.getElementById('taskDetailGrid').innerHTML = errorHtml(data.detail);
+                document.getElementById('taskDetailPanel').classList.add('open');
+                return;
+            }
 
             var panel = document.getElementById('taskDetailPanel');
             panel.classList.add('open');
@@ -944,6 +1402,17 @@
                 '<span class="detail-label">Priority</span><span>' + (data.priority || 0) + '</span>' +
                 '<span class="detail-label">Created</span><span>' + formatDateTime(data.createdAt) + '</span>';
 
+            // Retry button for failed tasks
+            var retrySection = document.getElementById('taskRetrySection');
+            if ((data.status || '').toLowerCase() === 'failed') {
+                retrySection.innerHTML = '<div style="margin-top: 12px;">' +
+                    '<button class="btn btn-danger btn-sm" onclick="retryTask(' + data.id + ')">Retry Task</button>' +
+                    '<span id="retryFeedback-' + data.id + '" style="margin-left: 12px; font-size: 13px;"></span>' +
+                    '</div>';
+            } else {
+                retrySection.innerHTML = '';
+            }
+
             var mlHtml = '';
             if (data.milestones && data.milestones.length > 0) {
                 mlHtml = '<h2 style="margin-top: 16px;">Milestones</h2>';
@@ -959,11 +1428,36 @@
             panel.scrollIntoView({ behavior: 'smooth' });
         }
 
-        // ── Create Task ────────────────────────────────────────────────
+        async function retryTask(taskId) {
+            var feedbackEl = document.getElementById('retryFeedback-' + taskId);
+            if (feedbackEl) feedbackEl.textContent = 'Retrying...';
+            var result = await apiFetch('/api/tasks/' + taskId + '/retry', { method: 'POST' });
+            if (result._error) {
+                if (feedbackEl) {
+                    feedbackEl.style.color = 'var(--red)';
+                    feedbackEl.textContent = 'Failed: ' + (result.detail || 'Unknown error');
+                }
+            } else {
+                if (feedbackEl) {
+                    feedbackEl.style.color = 'var(--green)';
+                    feedbackEl.textContent = 'Task retried successfully.';
+                }
+                refreshAll();
+                setTimeout(function() { showTaskDetail(taskId); }, 1000);
+            }
+        }
+
+        // -- Create Task --------------------------------------------------
         async function createTask(event) {
             event.preventDefault();
             var btn = document.getElementById('createTaskBtn');
             var feedback = document.getElementById('createFeedback');
+            if (!isLoggedIn()) {
+                feedback.className = 'form-feedback error';
+                feedback.textContent = 'Please log in with an API key to create tasks.';
+                feedback.style.display = 'block';
+                return false;
+            }
             btn.disabled = true;
             feedback.className = 'form-feedback';
             feedback.style.display = 'none';
@@ -1002,7 +1496,7 @@
             return false;
         }
 
-        // ── Payments ───────────────────────────────────────────────────
+        // -- Payments -----------------------------------------------------
         var paymentState = { page: 1, pageSize: 20, cursor: null, cursors: [null] };
 
         async function loadPayments() {
@@ -1017,7 +1511,14 @@
             var data = await apiFetch(url);
             var tbody = document.getElementById('paymentsTableBody');
 
-            if (data._error || !data.items || data.items.length === 0) {
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="7">' + errorHtml(data.detail) + '</td></tr>';
+                document.getElementById('paymentPrevBtn').style.display = 'none';
+                document.getElementById('paymentNextBtn').style.display = 'none';
+                return;
+            }
+
+            if (!data.items || data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No payments found</td></tr>';
                 document.getElementById('paymentPrevBtn').style.display = 'none';
                 document.getElementById('paymentNextBtn').style.display = 'none';
@@ -1051,7 +1552,485 @@
             loadPayments();
         }
 
-        // ── Event Log ──────────────────────────────────────────────────
+        // -- Agents Tab ---------------------------------------------------
+        async function loadAgentList() {
+            var data = await apiFetch('/api/agents?page=1&pageSize=50');
+            var tbody = document.getElementById('agentListBody');
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="5">' + errorHtml(data.detail) + '</td></tr>';
+                return;
+            }
+            var items = data.items || data;
+            if (!items || (Array.isArray(items) && items.length === 0)) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents registered</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(function(a) {
+                var pubkey = a.walletPubkey || a.walletPublicKey || '';
+                var truncPubkey = pubkey ? (pubkey.substring(0, 12) + '...' + pubkey.substring(pubkey.length - 6)) : '--';
+                return '<tr>' +
+                    '<td>#' + a.id + '</td>' +
+                    '<td>' + escapeHtml(a.name || '') + '</td>' +
+                    '<td>' + statusBadge(a.status) + '</td>' +
+                    '<td title="' + escapeHtml(pubkey) + '">' + escapeHtml(truncPubkey) + '</td>' +
+                    '<td><button class="btn btn-secondary btn-sm" onclick="showAgentDetail(' + a.id + ')">Details</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        async function showAgentDetail(agentId) {
+            var panel = document.getElementById('agentDetailPanel');
+            var content = document.getElementById('agentDetailContent');
+            panel.classList.add('open');
+            content.innerHTML = '<div class="empty-state">Loading agent details...</div>';
+
+            var repData = await apiFetch('/api/agents/' + agentId + '/reputation');
+            var tasksData = await apiFetch('/api/agents/' + agentId + '/assigned-tasks');
+
+            var html = '';
+
+            // Reputation section
+            if (repData._error) {
+                html += errorHtml(repData.detail);
+            } else {
+                var repScore = repData.reputationScore || repData.score || 0;
+                var repPct = Math.round(repScore * 100);
+                var repColor = repScore >= 0.6 ? 'var(--green)' : (repScore >= 0.3 ? 'var(--yellow)' : 'var(--red)');
+                html += '<h2 style="margin-top: 0;">Reputation</h2>';
+                html += '<div class="metric-grid">';
+                html += '<div class="metric-item"><div class="metric-value">' + (repData.totalTasks || 0) + '</div><div class="metric-label">Total Tasks</div></div>';
+                html += '<div class="metric-item"><div class="metric-value" style="color:var(--green)">' + (repData.completedTasks || 0) + '</div><div class="metric-label">Completed</div></div>';
+                html += '<div class="metric-item"><div class="metric-value" style="color:var(--green)">' + (repData.verificationPasses || 0) + '</div><div class="metric-label">Verification Passes</div></div>';
+                html += '<div class="metric-item"><div class="metric-value" style="color:var(--red)">' + (repData.verificationFails || 0) + '</div><div class="metric-label">Verification Fails</div></div>';
+                html += '</div>';
+                html += '<div style="padding: 0 4px; margin-bottom: 16px;">';
+                html += '<span style="font-size: 13px; color: var(--text-dim);">Reputation Score: <strong style="color:' + repColor + '">' + repScore.toFixed(3) + '</strong></span>';
+                html += '<div class="score-bar-wide"><div class="fill" style="width:' + repPct + '%;background:' + repColor + '"></div></div>';
+                html += '</div>';
+            }
+
+            // Assigned tasks
+            html += '<h2>Assigned Tasks</h2>';
+            if (tasksData._error) {
+                html += errorHtml(tasksData.detail);
+            } else {
+                var taskItems = tasksData.items || tasksData;
+                if (!taskItems || (Array.isArray(taskItems) && taskItems.length === 0)) {
+                    html += '<div class="empty-state">No assigned tasks</div>';
+                } else {
+                    html += '<div style="overflow-x:auto;"><table>';
+                    html += '<thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Payout</th></tr></thead><tbody>';
+                    html += taskItems.map(function(t) {
+                        return '<tr>' +
+                            '<td>#' + t.id + '</td>' +
+                            '<td>' + escapeHtml(t.title || '') + '</td>' +
+                            '<td>' + statusBadge(t.status) + '</td>' +
+                            '<td class="sats">' + formatSats(t.maxPayoutSats) + '</td>' +
+                            '</tr>';
+                    }).join('');
+                    html += '</tbody></table></div>';
+                }
+            }
+
+            // Suspend button
+            html += '<div style="margin-top: 16px;">' +
+                '<button class="btn btn-danger btn-sm" onclick="suspendAgent(' + agentId + ')">Suspend Agent</button>' +
+                '<span id="suspendFeedback-' + agentId + '" style="margin-left: 12px; font-size: 13px;"></span>' +
+                '</div>';
+
+            content.innerHTML = html;
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function suspendAgent(agentId) {
+            var feedbackEl = document.getElementById('suspendFeedback-' + agentId);
+            if (feedbackEl) feedbackEl.textContent = 'Suspending...';
+            var result = await apiFetch('/api/agents/' + agentId + '/suspend', { method: 'POST' });
+            if (result._error) {
+                if (feedbackEl) {
+                    feedbackEl.style.color = 'var(--red)';
+                    feedbackEl.textContent = 'Failed: ' + (result.detail || 'Unknown error');
+                }
+            } else {
+                if (feedbackEl) {
+                    feedbackEl.style.color = 'var(--green)';
+                    feedbackEl.textContent = 'Agent suspended.';
+                }
+                loadAgentList();
+            }
+        }
+
+        async function registerAgent(event) {
+            event.preventDefault();
+            var btn = document.getElementById('registerAgentBtn');
+            var feedback = document.getElementById('registerAgentFeedback');
+            var keyResult = document.getElementById('agentApiKeyResult');
+            btn.disabled = true;
+            feedback.className = 'form-feedback';
+            feedback.style.display = 'none';
+            keyResult.innerHTML = '';
+
+            var body = {
+                name: document.getElementById('agentName').value,
+                walletPubkey: document.getElementById('agentWallet').value || null
+            };
+
+            var result = await apiFetch('/api/agents/register', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+
+            btn.disabled = false;
+
+            if (result._error) {
+                feedback.className = 'form-feedback error';
+                feedback.textContent = result.detail || 'Failed to register agent.';
+                feedback.style.display = 'block';
+                return false;
+            }
+
+            feedback.className = 'form-feedback success';
+            feedback.textContent = 'Agent registered successfully! ID: ' + (result.agentId || result.id || '--');
+            feedback.style.display = 'block';
+
+            if (result.apiKey) {
+                keyResult.innerHTML = '<div class="api-key-box">' +
+                    '<button class="copy-btn" onclick="copyApiKey(this)">Copy</button>' +
+                    '<strong>API Key:</strong><br>' + escapeHtml(result.apiKey) +
+                    '</div>' +
+                    '<div class="api-key-warning">This API key will only be shown once. Save it somewhere secure.</div>';
+            }
+
+            document.getElementById('registerAgentForm').reset();
+            loadAgentList();
+            return false;
+        }
+
+        function copyApiKey(btn) {
+            var keyBox = btn.parentElement;
+            var text = keyBox.textContent.replace('Copy', '').replace('API Key:', '').trim();
+            navigator.clipboard.writeText(text).then(function() {
+                btn.textContent = 'Copied!';
+                setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+            });
+        }
+
+        // -- Escrows Tab --------------------------------------------------
+        async function loadEscrowData() {
+            var data = await apiFetch('/api/stats');
+            if (data._error) {
+                document.getElementById('escrowStatsHeld').textContent = '--';
+                document.getElementById('escrowStatsSettled').textContent = '--';
+                document.getElementById('escrowStatsCancelled').textContent = '--';
+                document.getElementById('escrowStatsAmount').textContent = '--';
+                document.getElementById('verifyTotal').textContent = '--';
+                document.getElementById('verifyPassed').textContent = '--';
+                document.getElementById('verifyFailed').textContent = '--';
+                document.getElementById('verifyPassRateText').textContent = '--';
+                document.getElementById('verifyPassRateBar').style.width = '0%';
+                return;
+            }
+
+            // Escrow stats
+            var escrow = data.escrow || data;
+            document.getElementById('escrowStatsHeld').textContent = escrow.held ?? escrow.escrowHeld ?? 0;
+            document.getElementById('escrowStatsSettled').textContent = escrow.settled ?? escrow.escrowSettled ?? 0;
+            document.getElementById('escrowStatsCancelled').textContent = escrow.cancelled ?? escrow.escrowCancelled ?? 0;
+            document.getElementById('escrowStatsAmount').textContent = formatSats(escrow.heldAmountSats ?? escrow.escrowHeldAmountSats ?? 0);
+
+            // Verification stats
+            var verify = data.verification || data;
+            var vTotal = verify.total ?? verify.verificationTotal ?? 0;
+            var vPassed = verify.passed ?? verify.verificationPassed ?? 0;
+            var vFailed = verify.failed ?? verify.verificationFailed ?? 0;
+            var vRate = verify.passRate ?? verify.verificationPassRate ?? (vTotal > 0 ? vPassed / vTotal : 0);
+            var vPct = Math.round(vRate * 100);
+
+            document.getElementById('verifyTotal').textContent = vTotal;
+            document.getElementById('verifyPassed').textContent = vPassed;
+            document.getElementById('verifyFailed').textContent = vFailed;
+            document.getElementById('verifyPassRateText').textContent = vPct + '%';
+            document.getElementById('verifyPassRateBar').style.width = vPct + '%';
+        }
+
+        async function openDispute(event) {
+            event.preventDefault();
+            var btn = document.getElementById('openDisputeBtn');
+            var feedback = document.getElementById('disputeFeedback');
+            btn.disabled = true;
+            feedback.className = 'form-feedback';
+            feedback.style.display = 'none';
+
+            var body = {
+                taskId: parseInt(document.getElementById('disputeTaskId').value),
+                reason: document.getElementById('disputeReason').value
+            };
+
+            var result = await apiFetch('/api/disputes', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+
+            btn.disabled = false;
+
+            if (result._error) {
+                feedback.className = 'form-feedback error';
+                feedback.textContent = result.detail || 'Failed to open dispute.';
+                feedback.style.display = 'block';
+                return false;
+            }
+
+            feedback.className = 'form-feedback success';
+            feedback.textContent = 'Dispute opened successfully. ID: ' + (result.disputeId || result.id || '--');
+            feedback.style.display = 'block';
+            document.getElementById('openDisputeForm').reset();
+            return false;
+        }
+
+        // -- System Tab ---------------------------------------------------
+        async function loadSystemData() {
+            await Promise.all([
+                loadServiceHealth(),
+                loadDetailedHealth(),
+                loadApiKeyStatus(),
+                loadAppMetrics(),
+                loadSystemStats()
+            ]);
+        }
+
+        async function loadServiceHealth() {
+            var container = document.getElementById('serviceHealthContent');
+            var data = await apiFetch('/api/health/services');
+            if (data._error) {
+                container.innerHTML = errorHtml(data.detail);
+                return;
+            }
+            var services = Array.isArray(data) ? data : (data.services || data.items || []);
+            if (services.length === 0) {
+                container.innerHTML = '<div class="empty-state">No service data available</div>';
+                return;
+            }
+            var html = '<div style="overflow-x:auto;"><table>';
+            html += '<thead><tr><th>Service</th><th>Status</th><th>Consecutive Failures</th><th>Last Success</th></tr></thead><tbody>';
+            html += services.map(function(s) {
+                var isHealthy = (s.status || '').toLowerCase() === 'healthy' || s.isHealthy === true;
+                var dotClass = isHealthy ? 'healthy' : 'unhealthy';
+                return '<tr>' +
+                    '<td><span class="health-dot ' + dotClass + '"></span>' + escapeHtml(s.name || s.service || '') + '</td>' +
+                    '<td>' + escapeHtml(s.status || (isHealthy ? 'Healthy' : 'Unhealthy')) + '</td>' +
+                    '<td>' + (s.consecutiveFailures ?? 0) + '</td>' +
+                    '<td>' + formatDateTime(s.lastSuccess || s.lastSuccessTime) + '</td>' +
+                    '</tr>';
+            }).join('');
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        async function loadDetailedHealth() {
+            var container = document.getElementById('detailedHealthContent');
+            var data = await apiFetch('/api/health/detailed');
+            if (data._error) {
+                container.innerHTML = errorHtml(data.detail);
+                return;
+            }
+            var checks = data.checks || data.entries || data.results || (Array.isArray(data) ? data : []);
+            if (typeof data === 'object' && !Array.isArray(data) && !data.checks && !data.entries && !data.results) {
+                // It might be a flat object with status properties
+                var entries = [];
+                for (var key in data) {
+                    if (data.hasOwnProperty(key) && typeof data[key] === 'object') {
+                        entries.push(Object.assign({ name: key }, data[key]));
+                    }
+                }
+                if (entries.length > 0) checks = entries;
+            }
+            if (!checks || checks.length === 0) {
+                container.innerHTML = '<div class="empty-state">No health check data</div>';
+                return;
+            }
+            var html = '<div style="overflow-x:auto;"><table>';
+            html += '<thead><tr><th>Check</th><th>Status</th><th>Duration</th></tr></thead><tbody>';
+            html += checks.map(function(c) {
+                var st = c.status || 'Unknown';
+                var isOk = st.toLowerCase() === 'healthy' || st.toLowerCase() === 'passed' || st.toLowerCase() === 'ok';
+                var dotClass = isOk ? 'healthy' : (st.toLowerCase() === 'degraded' ? 'degraded' : 'unhealthy');
+                return '<tr>' +
+                    '<td><span class="health-dot ' + dotClass + '"></span>' + escapeHtml(c.name || c.check || '') + '</td>' +
+                    '<td>' + escapeHtml(st) + '</td>' +
+                    '<td>' + (c.duration || c.durationMs ? (c.durationMs || c.duration) + 'ms' : '--') + '</td>' +
+                    '</tr>';
+            }).join('');
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        async function loadApiKeyStatus() {
+            var container = document.getElementById('apiKeyStatusContent');
+            var data = await apiFetch('/api/secrets/status');
+            if (data._error) {
+                container.innerHTML = errorHtml(data.detail);
+                return;
+            }
+            var html = '<div class="metric-grid">';
+
+            // Claude status
+            var claude = data.claude || {};
+            var claudeConfigured = claude.configured ?? claude.isConfigured ?? false;
+            var claudeValid = claude.valid ?? claude.isValid ?? false;
+            html += '<div class="metric-item">';
+            html += '<div class="metric-value"><span class="health-dot ' + (claudeValid ? 'healthy' : (claudeConfigured ? 'degraded' : 'unhealthy')) + '"></span></div>';
+            html += '<div class="metric-label">Claude API Key</div>';
+            html += '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Configured: ' + (claudeConfigured ? 'Yes' : 'No') + ' | Valid: ' + (claudeValid ? 'Yes' : 'No') + '</div>';
+            html += '</div>';
+
+            // OpenRouter status
+            var openRouter = data.openRouter || data.openrouter || {};
+            var orConfigured = openRouter.configured ?? openRouter.isConfigured ?? false;
+            var orValid = openRouter.valid ?? openRouter.isValid ?? false;
+            html += '<div class="metric-item">';
+            html += '<div class="metric-value"><span class="health-dot ' + (orValid ? 'healthy' : (orConfigured ? 'degraded' : 'unhealthy')) + '"></span></div>';
+            html += '<div class="metric-label">OpenRouter API Key</div>';
+            html += '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Configured: ' + (orConfigured ? 'Yes' : 'No') + ' | Valid: ' + (orValid ? 'Yes' : 'No') + '</div>';
+            html += '</div>';
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function loadAppMetrics() {
+            var data = await apiFetch('/api/metrics');
+            if (data._error) {
+                document.getElementById('metricTasksCreated').textContent = '--';
+                document.getElementById('metricTasksCompleted').textContent = '--';
+                document.getElementById('metricApiRequests').textContent = '--';
+                document.getElementById('metricApiErrors').textContent = '--';
+                document.getElementById('metricQueueDepth').textContent = '--';
+                document.getElementById('metricAvgDuration').textContent = '--';
+                return;
+            }
+            document.getElementById('metricTasksCreated').textContent = formatSats(data.tasksCreated ?? 0);
+            document.getElementById('metricTasksCompleted').textContent = formatSats(data.tasksCompleted ?? 0);
+            document.getElementById('metricApiRequests').textContent = formatSats(data.apiRequestsTotal ?? 0);
+            document.getElementById('metricApiErrors').textContent = data.apiErrors5xx ?? 0;
+            document.getElementById('metricQueueDepth').textContent = data.queueDepth ?? 0;
+            document.getElementById('metricAvgDuration').textContent = (data.avgRequestDurationMs ?? 0).toFixed(1);
+        }
+
+        async function loadSystemStats() {
+            var container = document.getElementById('systemStatsContent');
+            var data = await apiFetch('/api/stats');
+            if (data._error) {
+                container.innerHTML = errorHtml(data.detail);
+                return;
+            }
+            var html = '<div class="detail-grid">';
+            html += '<span class="detail-label">Uptime</span><span>' + escapeHtml(data.uptime || '--') + '</span>';
+            html += '<span class="detail-label">Total Agents</span><span>' + (data.agentCount ?? data.totalAgents ?? '--') + '</span>';
+            html += '<span class="detail-label">Active Agents</span><span>' + (data.activeAgents ?? '--') + '</span>';
+            html += '<span class="detail-label">Total Tasks</span><span>' + (data.taskCount ?? data.totalTasks ?? '--') + '</span>';
+            html += '<span class="detail-label">Escrow Held</span><span>' + (data.escrowCount ?? data.escrowHeld ?? '--') + '</span>';
+            html += '<span class="detail-label">Verification Pass Rate</span><span>' + ((data.verificationPassRate ?? data.verification?.passRate) != null ? (((data.verificationPassRate ?? data.verification?.passRate) * 100).toFixed(1) + '%') : '--') + '</span>';
+            html += '<span class="detail-label">Disputes Open</span><span>' + (data.disputeCount ?? data.disputesOpen ?? '--') + '</span>';
+            html += '<span class="detail-label">Disputes Total</span><span>' + (data.disputesTotal ?? '--') + '</span>';
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // -- Admin Tab ----------------------------------------------------
+        async function loadAdminData() {
+            await Promise.all([
+                loadBackupList(),
+                loadAuditLog()
+            ]);
+        }
+
+        async function createBackup() {
+            var feedback = document.getElementById('backupFeedback');
+            feedback.className = 'form-feedback';
+            feedback.style.display = 'none';
+
+            var result = await apiFetch('/api/admin/backup', { method: 'POST' });
+            if (result._error) {
+                feedback.className = 'form-feedback error';
+                feedback.textContent = 'Backup failed: ' + (result.detail || 'Unknown error');
+                feedback.style.display = 'block';
+                return;
+            }
+
+            feedback.className = 'form-feedback success';
+            feedback.textContent = 'Backup created: ' + (result.fileName || result.filename || '--') + ' (' + formatBytes(result.sizeBytes || result.size) + ')';
+            feedback.style.display = 'block';
+            loadBackupList();
+        }
+
+        async function loadBackupList() {
+            var tbody = document.getElementById('backupListBody');
+            var data = await apiFetch('/api/admin/backups');
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="3">' + errorHtml(data.detail) + '</td></tr>';
+                return;
+            }
+            var items = Array.isArray(data) ? data : (data.items || []);
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No backups found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(function(b) {
+                return '<tr>' +
+                    '<td>' + escapeHtml(b.fileName || b.filename || '') + '</td>' +
+                    '<td>' + formatBytes(b.sizeBytes || b.size) + '</td>' +
+                    '<td>' + formatDateTime(b.createdAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function downloadExport(type) {
+            var apiKey = localStorage.getItem('dashboard_api_key');
+            var url = API_BASE + '/api/admin/export/' + type + '?format=csv';
+            if (apiKey) url += '&apiKey=' + encodeURIComponent(apiKey);
+            window.open(url, '_blank');
+        }
+
+        var auditState = { page: 1, pageSize: 20 };
+
+        async function loadAuditLog() {
+            var tbody = document.getElementById('auditLogBody');
+            var data = await apiFetch('/api/admin/audit?page=' + auditState.page + '&pageSize=' + auditState.pageSize);
+            if (data._error) {
+                tbody.innerHTML = '<tr><td colspan="4">' + errorHtml(data.detail) + '</td></tr>';
+                document.getElementById('auditPrevBtn').style.display = 'none';
+                document.getElementById('auditNextBtn').style.display = 'none';
+                return;
+            }
+            var items = data.items || (Array.isArray(data) ? data : []);
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No audit entries</td></tr>';
+                document.getElementById('auditPrevBtn').style.display = 'none';
+                document.getElementById('auditNextBtn').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('auditPrevBtn').style.display = auditState.page > 1 ? '' : 'none';
+            document.getElementById('auditNextBtn').style.display = (data.hasMore || items.length >= auditState.pageSize) ? '' : 'none';
+
+            tbody.innerHTML = items.map(function(a) {
+                var details = a.details || a.description || '';
+                return '<tr>' +
+                    '<td>' + escapeHtml(a.eventType || a.type || '') + '</td>' +
+                    '<td>' + escapeHtml(a.entityType || '') + '</td>' +
+                    '<td title="' + escapeHtml(details) + '">' + escapeHtml(truncate(details, 60)) + '</td>' +
+                    '<td>' + formatDateTime(a.createdAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function auditPage(delta) {
+            auditState.page += delta;
+            if (auditState.page < 1) auditState.page = 1;
+            loadAuditLog();
+        }
+
+        // -- Event Log ----------------------------------------------------
         var MAX_EVENTS = 100;
         var events = [];
 
@@ -1076,7 +2055,7 @@
             }).join('');
         }
 
-        // ── SignalR Connection ─────────────────────────────────────────
+        // -- SignalR Connection -------------------------------------------
         var connection = null;
 
         function setConnectionStatus(connected) {
@@ -1094,7 +2073,7 @@
         async function initSignalR() {
             if (typeof signalR === 'undefined') {
                 try {
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js');
+                    await loadScript('/signalr.min.js');
                 } catch (e) {
                     console.warn('Could not load SignalR client library.');
                     setConnectionStatus(false);
@@ -1108,7 +2087,7 @@
                 .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
                 .build();
 
-            // ── Existing events ──
+            // -- Existing events --
             connection.on('TaskAssigned', function(evt) {
                 addEvent('TaskAssigned', 'Task #' + evt.taskId + ' assigned to Agent #' + evt.agentId);
                 refreshAll();
@@ -1145,7 +2124,7 @@
                 refreshAll();
             });
 
-            // ── New events ──
+            // -- New events --
             connection.on('TaskStatusChanged', function(evt) {
                 addEvent('TaskStatusChanged', 'Task #' + evt.taskId + ': ' + evt.previousStatus + ' -> ' + evt.newStatus);
                 refreshAll();
@@ -1188,20 +2167,73 @@
             });
         }
 
-        // ── Search on Enter key ────────────────────────────────────────
+        // -- Search on Enter key ------------------------------------------
         document.getElementById('taskSearchInput').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') searchTasks();
         });
 
-        // ── Refresh Loop ───────────────────────────────────────────────
+        // -- Refresh Loop -------------------------------------------------
         async function refreshAll() {
             await Promise.all([loadSummary(), loadRecentTasks(), loadAgents()]);
             document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
         }
 
+        // ── Authentication ────────────────────────────────────────────
+        function isLoggedIn() {
+            return !!localStorage.getItem('dashboard_api_key');
+        }
+
+        function updateAuthUI() {
+            var loggedIn = isLoggedIn();
+            document.getElementById('authLoggedOut').style.display = loggedIn ? 'none' : 'flex';
+            document.getElementById('authLoggedIn').style.display = loggedIn ? 'flex' : 'none';
+            document.querySelectorAll('.admin-only').forEach(function(el) {
+                el.style.display = loggedIn ? '' : 'none';
+            });
+            // If viewing an admin tab while logged out, switch to overview
+            if (!loggedIn) {
+                var activeTab = document.querySelector('.nav-tab.active');
+                if (activeTab && activeTab.classList.contains('admin-only')) {
+                    document.querySelector('.nav-tab[data-tab="overview"]').click();
+                }
+            }
+        }
+
+        async function doLogin() {
+            var key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) return;
+            // Validate the key by calling a protected endpoint
+            var resp = await fetch(API_BASE + '/api/stats', {
+                headers: { 'Accept': 'application/json', 'X-Api-Key': key }
+            });
+            if (resp.ok) {
+                localStorage.setItem('dashboard_api_key', key);
+                document.getElementById('apiKeyInput').value = '';
+                updateAuthUI();
+                addEvent('Auth', 'Admin logged in');
+            } else {
+                document.getElementById('apiKeyInput').style.borderColor = 'var(--red)';
+                setTimeout(function() {
+                    document.getElementById('apiKeyInput').style.borderColor = 'var(--border)';
+                }, 2000);
+            }
+        }
+
+        function doLogout() {
+            localStorage.removeItem('dashboard_api_key');
+            updateAuthUI();
+            addEvent('Auth', 'Admin logged out');
+        }
+
+        document.getElementById('apiKeyInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') doLogin();
+        });
+
         async function init() {
+            updateAuthUI();
             await refreshAll();
             await loadTimeline();
+            loadPrices();
             initSignalR();
             setInterval(refreshAll, REFRESH_INTERVAL);
             setInterval(loadTimeline, 60000);
