@@ -19,7 +19,7 @@ public class RateLimitingMiddleware
 
     private static readonly string[] SkipPaths =
     {
-        "/api/health", "/openapi", "/scalar"
+        "/api/health", "/openapi", "/scalar", "/hubs"
     };
 
     public RateLimitingMiddleware(RequestDelegate next, ILogger<RateLimitingMiddleware> logger)

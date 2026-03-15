@@ -12,7 +12,11 @@ public class ApiKeyAuthMiddleware
 
     private const string ApiKeyHeader = "X-Api-Key";
 
-    private static readonly string[] SkipPaths = { "/api/health", "/api/auth", "/swagger", "/scalar", "/openapi", "/dashboard" };
+    private static readonly string[] SkipPaths = { "/api/health", "/api/auth", "/swagger", "/scalar", "/openapi" };
+
+    // Static files (dashboard, JS, CSS) bypass API key auth — the dashboard
+    // itself handles authentication via the login UI and X-Api-Key header on API calls
+    private static readonly string[] StaticFileExtensions = { ".html", ".js", ".css", ".ico", ".png", ".svg" };
 
     public ApiKeyAuthMiddleware(
         RequestDelegate next,
@@ -28,8 +32,9 @@ public class ApiKeyAuthMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // Skip auth for health and swagger endpoints
-        if (SkipPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        // Skip auth for health, swagger, and static file endpoints
+        if (SkipPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+            || StaticFileExtensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);
             return;

@@ -243,10 +243,29 @@ else if (!builder.Environment.IsDevelopment())
 }
 else
 {
-    // Development only: warn but allow startup without JWT
-    Console.WriteLine("WARNING: Jwt:Secret is not configured. JWT authentication is disabled. " +
-        "This is only acceptable in development.");
-    builder.Services.AddAuthentication();
+    // Development only: generate ephemeral JWT secret so auth is still functional
+    var ephemeralSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+    Console.WriteLine("WARNING: Jwt:Secret is not configured. Using ephemeral secret for this session. " +
+        "Set Jwt:Secret for persistent JWT tokens.");
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(ephemeralSecret)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
 }
 
 builder.Services.AddAuthorization(options =>
@@ -349,15 +368,26 @@ builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
 {
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-        ?? ["https://localhost:5001", "http://localhost:5000"];
+        ?? ["https://localhost:5001", "http://localhost:5210"];
 
-    options.AddDefaultPolicy(policy =>
+    if (allowedOrigins.Length == 0 && !builder.Environment.IsDevelopment())
     {
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
-    });
+        // In production, default to same-origin only (no CORS)
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.SetIsOriginAllowed(_ => false);
+        });
+    }
+    else
+    {
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.WithOrigins(allowedOrigins.Where(o => !string.IsNullOrWhiteSpace(o)).ToArray())
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
+    }
 });
 
 var app = builder.Build();
