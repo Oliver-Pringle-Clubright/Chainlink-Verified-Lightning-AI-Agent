@@ -201,5 +201,62 @@ public class MigrationRunner
             ALTER TABLE Payments ADD COLUMN ReceiverAddress TEXT;
             ALTER TABLE Payments ADD COLUMN AmountWei TEXT;
         ");
+
+        yield return ("2.3.2", "Add RecurringTasks table and DependsOnTaskId column to Tasks", @"
+            CREATE TABLE IF NOT EXISTS RecurringTasks (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                TemplateTaskId INTEGER,
+                CronExpression TEXT NOT NULL DEFAULT 'daily',
+                Title TEXT NOT NULL,
+                Description TEXT NOT NULL DEFAULT '',
+                TaskType TEXT NOT NULL DEFAULT 'Code',
+                MaxPayoutSats INTEGER NOT NULL DEFAULT 0,
+                Active INTEGER NOT NULL DEFAULT 1,
+                LastRunAt TEXT,
+                NextRunAt TEXT,
+                CreatedAt TEXT NOT NULL
+            );
+            ALTER TABLE Tasks ADD COLUMN DependsOnTaskId INTEGER;
+        ");
+
+        yield return ("2.3.1", "Add Artifacts, WebhookSubscriptions, TaskTemplates tables and wallet/payment fields", @"
+            CREATE TABLE IF NOT EXISTS Artifacts (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                TaskId INTEGER NOT NULL,
+                MilestoneId INTEGER,
+                AgentId INTEGER,
+                FileName TEXT NOT NULL,
+                ContentType TEXT NOT NULL DEFAULT 'application/octet-stream',
+                SizeBytes INTEGER NOT NULL,
+                StoragePath TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS WebhookSubscriptions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                AgentId INTEGER,
+                Url TEXT NOT NULL,
+                Events TEXT NOT NULL DEFAULT '',
+                Secret TEXT,
+                Active INTEGER NOT NULL DEFAULT 1,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS TaskTemplates (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL,
+                Category TEXT NOT NULL DEFAULT '',
+                Description TEXT NOT NULL,
+                TaskType TEXT NOT NULL DEFAULT 'Code',
+                VerificationCriteria TEXT NOT NULL DEFAULT '',
+                SuggestedPayoutSats INTEGER NOT NULL DEFAULT 0,
+                RequiredSkills TEXT NOT NULL DEFAULT '',
+                CreatedAt TEXT NOT NULL
+            );
+            ALTER TABLE Agents ADD COLUMN EthAddress TEXT;
+            ALTER TABLE Agents ADD COLUMN PreferredChainId INTEGER;
+            ALTER TABLE Agents ADD COLUMN PreferredPaymentMethod TEXT;
+            ALTER TABLE Tasks ADD COLUMN PreferredPaymentMethod TEXT;
+            ALTER TABLE Tasks ADD COLUMN PaymentChainId INTEGER;
+            ALTER TABLE Tasks ADD COLUMN ClientWalletAddress TEXT;
+        ");
     }
 }

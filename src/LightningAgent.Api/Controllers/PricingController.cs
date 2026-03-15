@@ -212,6 +212,58 @@ public class PricingController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Suggest a price for a task based on type, complexity, and current BTC/USD rate.
+    /// </summary>
+    [HttpGet("suggest")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SuggestPrice(
+        [FromQuery] string taskType,
+        [FromQuery] string complexity = "medium",
+        [FromQuery] string? description = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(taskType))
+            return BadRequest("taskType query parameter is required.");
+
+        var normalizedType = taskType.Trim().ToLowerInvariant();
+        var normalizedComplexity = (complexity ?? "medium").Trim().ToLowerInvariant();
+
+        // Base sats by task type and complexity
+        long suggestedSats = (normalizedType, normalizedComplexity) switch
+        {
+            ("code", "low") => 5000,
+            ("code", "medium") => 15000,
+            ("code", "high") => 50000,
+            ("text", "low") => 2000,
+            ("text", "medium") => 8000,
+            ("text", "high") => 25000,
+            ("data", "low") => 3000,
+            ("data", "medium") => 10000,
+            ("data", "high") => 35000,
+            ("image", "low") => 1000,
+            ("image", "medium") => 5000,
+            ("image", "high") => 15000,
+            _ => 5000 // default fallback
+        };
+
+        var latest = await _priceCacheRepository.GetLatestAsync("BTC/USD", ct);
+        var btcUsdRate = latest?.PriceUsd ?? 60000.0;
+
+        var suggestedUsd = Math.Round((double)suggestedSats / 100_000_000.0 * btcUsdRate, 4);
+
+        return Ok(new
+        {
+            suggestedSats,
+            suggestedUsd,
+            btcUsdRate,
+            taskType,
+            complexity = normalizedComplexity,
+            marketRate = "competitive"
+        });
+    }
+
     private static string? NormalizePair(string input)
     {
         var clean = input.ToUpperInvariant().Replace("-", "").Replace("_", "").Replace("/", "");

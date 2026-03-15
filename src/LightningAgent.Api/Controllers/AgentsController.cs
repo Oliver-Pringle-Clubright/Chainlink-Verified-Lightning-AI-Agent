@@ -374,6 +374,99 @@ public class AgentsController : ControllerBase
     }
 
     /// <summary>
+    /// Get the rate card for an agent (pricing per skill type).
+    /// </summary>
+    [HttpGet("{id:int}/rates")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetRates(int id, CancellationToken ct)
+    {
+        var agent = await _cachedData.GetAgentAsync(id, ct);
+        if (agent is null)
+            return NotFound($"Agent {id} not found.");
+
+        var capabilities = await _cachedData.GetAgentCapabilitiesAsync(id, ct);
+
+        var rates = capabilities.Select(c => new
+        {
+            skillType = c.SkillType.ToString(),
+            taskTypes = c.TaskTypes.Split(',', StringSplitOptions.RemoveEmptyEntries),
+            pricePerUnit = c.PriceSatsPerUnit,
+            maxConcurrency = c.MaxConcurrency
+        }).ToList();
+
+        return Ok(new
+        {
+            agentId = id,
+            rates
+        });
+    }
+
+    /// <summary>
+    /// Update the rate card (pricing) for an agent's capabilities.
+    /// </summary>
+    [HttpPut("{id:int}/rates")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateRates(
+        int id,
+        [FromBody] List<UpdateRateRequest> rateUpdates,
+        CancellationToken ct)
+    {
+        if (!AuthorizationHelper.CanAccessAgent(HttpContext, id))
+            return Forbid();
+
+        var agent = await _agentRepository.GetByIdAsync(id, ct);
+        if (agent is null)
+            return NotFound($"Agent {id} not found.");
+
+        var capabilities = await _capabilityRepository.GetByAgentIdAsync(id, ct);
+        var updatedCount = 0;
+
+        foreach (var update in rateUpdates)
+        {
+            if (!Enum.TryParse<SkillType>(update.SkillType, ignoreCase: true, out var skillType))
+                continue;
+
+            var capability = capabilities.FirstOrDefault(c => c.SkillType == skillType);
+            if (capability is null)
+                continue;
+
+            capability.PriceSatsPerUnit = update.PricePerUnit;
+
+            // Use delete + re-create pattern since the interface only exposes Create and DeleteByAgentId
+            // We need to update individual capabilities, so we'll delete all and re-create
+            updatedCount++;
+        }
+
+        if (updatedCount > 0)
+        {
+            await _capabilityRepository.DeleteByAgentIdAsync(id, ct);
+            var now = DateTime.UtcNow;
+            foreach (var cap in capabilities)
+            {
+                // Apply updates from the request
+                var update = rateUpdates.FirstOrDefault(u =>
+                    Enum.TryParse<SkillType>(u.SkillType, ignoreCase: true, out var st) && st == cap.SkillType);
+                if (update is not null)
+                    cap.PriceSatsPerUnit = update.PricePerUnit;
+
+                cap.CreatedAt = now;
+                await _capabilityRepository.CreateAsync(cap, ct);
+            }
+
+            _cachedData.InvalidateAgent(id);
+        }
+
+        _logger.LogInformation("Updated rates for agent {AgentId}: {Count} capability(ies) updated", id, updatedCount);
+
+        return Ok(new { message = $"Rates updated for agent {id}.", updatedCount });
+    }
+
+    /// <summary>
     /// Suspend an agent. Admin only.
     /// </summary>
     [HttpPost("{id:int}/suspend")]

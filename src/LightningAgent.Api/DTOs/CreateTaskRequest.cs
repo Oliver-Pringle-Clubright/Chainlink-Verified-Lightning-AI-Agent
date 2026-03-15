@@ -29,4 +29,6 @@ public class CreateTaskRequest
     public string? ClientId { get; set; }
 
     public bool UseNaturalLanguage { get; set; }
+
+    public int? DependsOnTaskId { get; set; }
 }

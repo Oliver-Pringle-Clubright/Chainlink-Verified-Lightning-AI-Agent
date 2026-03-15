@@ -5,5 +5,13 @@ public enum TaskType
     Code,
     Data,
     Text,
-    Image
+    Image,
+    PythonCode,
+    JavaScriptCode,
+    RustCode,
+    SolidityCode,
+    GoCode,
+    Research,
+    Translation,
+    Design
 }

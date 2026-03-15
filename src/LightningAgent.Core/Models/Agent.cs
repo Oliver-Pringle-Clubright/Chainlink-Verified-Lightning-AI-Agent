@@ -14,6 +14,9 @@ public class Agent
     public string? WebhookUrl { get; set; }
     public string? ApiKeyHash { get; set; }
     public int RateLimitPerMinute { get; set; } = 100;
+    public string? EthAddress { get; set; }
+    public long? PreferredChainId { get; set; }
+    public string? PreferredPaymentMethod { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

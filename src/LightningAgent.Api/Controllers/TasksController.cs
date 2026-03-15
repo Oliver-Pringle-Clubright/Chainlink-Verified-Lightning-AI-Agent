@@ -101,6 +101,14 @@ public class TasksController : ControllerBase
         if (request.MaxPayoutSats > _spendLimits.DefaultPerTaskMaxSats)
             return BadRequest($"MaxPayoutSats ({request.MaxPayoutSats}) exceeds the per-task limit of {_spendLimits.DefaultPerTaskMaxSats} sats.");
 
+        // Validate task dependency if provided
+        if (request.DependsOnTaskId.HasValue)
+        {
+            var dependencyTask = await _taskRepository.GetByIdAsync(request.DependsOnTaskId.Value, ct);
+            if (dependencyTask is null)
+                return BadRequest($"Dependency task {request.DependsOnTaskId.Value} does not exist.");
+        }
+
         var externalId = Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
 
@@ -115,6 +123,7 @@ public class TasksController : ControllerBase
             VerificationCriteria = request.VerificationCriteria,
             MaxPayoutSats = request.MaxPayoutSats,
             Priority = request.Priority ?? 0,
+            DependsOnTaskId = request.DependsOnTaskId,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -448,6 +457,14 @@ public class TasksController : ControllerBase
         var task = await _taskRepository.GetByIdAsync(id, ct);
         if (task is null)
             return NotFound($"Task {id} not found.");
+
+        // Block orchestration if task has an incomplete dependency
+        if (task.DependsOnTaskId.HasValue)
+        {
+            var depTask = await _taskRepository.GetByIdAsync(task.DependsOnTaskId.Value, ct);
+            if (depTask is not null && depTask.Status != TaskStatus.Completed)
+                return BadRequest($"Task {id} depends on task {task.DependsOnTaskId.Value} which is not yet Completed (current status: {depTask.Status}).");
+        }
 
         _logger.LogInformation("Starting orchestration for task {TaskId}", id);
 

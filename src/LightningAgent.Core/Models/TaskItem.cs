@@ -20,7 +20,11 @@ public class TaskItem
     public double? PriceUsd { get; set; }
     public int? AssignedAgentId { get; set; }
     public int Priority { get; set; }
+    public string? PreferredPaymentMethod { get; set; }
+    public long? PaymentChainId { get; set; }
+    public string? ClientWalletAddress { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public int? DependsOnTaskId { get; set; }
 }

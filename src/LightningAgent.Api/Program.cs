@@ -59,6 +59,8 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IWebhookLogRepository, WebhookLogRepository>();
 builder.Services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
 builder.Services.AddScoped<ICcipMessageRepository, CcipMessageRepository>();
+builder.Services.AddScoped<IArtifactRepository, ArtifactRepository>();
+builder.Services.AddScoped<IWebhookRepository, WebhookRepository>();
 
 // ── Configuration sections ──────────────────────────────────────────
 builder.Services.Configure<LightningSettings>(builder.Configuration.GetSection("Lightning"));
@@ -293,6 +295,7 @@ builder.Services.AddAuthorization(options =>
 
 // ── Webhook Delivery ─────────────────────────────────────────
 builder.Services.AddHttpClient<WebhookDeliveryService>();
+builder.Services.AddScoped<WebhookDispatcher>();
 
 // ── SignalR Event Publishing ──────────────────────────────────
 builder.Services.AddScoped<IEventPublisher, SignalREventPublisher>();
@@ -331,6 +334,7 @@ builder.Services.AddHostedService<ParentTaskCompletionService>();
 builder.Services.AddHostedService<AutomatedBackupService>();
 builder.Services.AddHostedService<CcipMessagePoller>();
 builder.Services.AddScoped<CcipBridgeService>();
+builder.Services.AddHostedService<LightningAgent.Engine.BackgroundJobs.RecurringTaskService>();
 
 // ── Task Queue (background orchestration) ────────────────────────────
 builder.Services.AddSingleton<ITaskQueue, TaskQueue>();
@@ -499,11 +503,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<IdempotencyMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference();
-}
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 app.UseCors();
 app.MapControllers();
