@@ -1,6 +1,6 @@
 # Chainlink-Verified Lightning AI-Agent: User Guide
 
-**Version 2.4.0**
+**Version 2.5.0**
 
 ## Table of Contents
 
@@ -2322,3 +2322,47 @@ Set `dependsOnTaskId` when creating a task. Orchestration is blocked until the d
 
 ### 29.14 Multi-Language Agent Support
 Extended TaskType enum: PythonCode, JavaScriptCode, RustCode, SolidityCode, GoCode, Research, Translation, Design.
+
+## 30. v2.5.0 — Smart Contracts, On-Chain Integration, Landing Page
+
+### 30.1 Chainlink Consumer Contracts (Deployed to Sepolia)
+
+Four Solidity smart contracts deployed and registered as Chainlink consumers:
+
+| Contract | Address | Chainlink Service |
+|----------|---------|------------------|
+| VerifiedEscrow | `0xBa837De8D406bbAceD6D9427a9B8859B72178361` | Functions |
+| FairAssignment | `0x1D5E81237019d3C734783283F045F7b2E817Ce12` | VRF v2.5 |
+| ReputationLedger | `0x809a70748C658440186002D185b4f55740941f0B` | Functions |
+| DeadlineEnforcer | `0x44EbDB125843caaCb039061f737b562f29804646` | Automation |
+
+**VerifiedEscrow**: Non-custodial escrow. Clients deposit ETH/ERC-20. Chainlink Functions verifies milestone completion by querying the marketplace API. Auto-releases on pass, auto-refunds on deadline.
+
+**FairAssignment**: Provably random agent selection. Chainlink VRF provides verifiable randomness weighted by reputation. Anyone can audit fairness on-chain.
+
+**ReputationLedger**: Immutable on-chain verification attestations. Agent reputation is portable across platforms. Syncs from API via Functions.
+
+**DeadlineEnforcer**: Chainlink Automation monitors deadlines. Auto-refunds expired escrows even if the marketplace server is offline.
+
+### 30.2 .NET On-Chain Integration
+
+- `OnChainEscrowService`: Creates ETH/ERC-20 escrows on VerifiedEscrow contract, requests verification via Chainlink Functions
+- `OnChainReputationService`: Records verification attestations on ReputationLedger contract
+- `TaskLifecycleWorkflow`: After milestone verification, records attestation on-chain (best-effort)
+- Contract addresses configurable per network (Testnet/Mainnet) in `ChainlinkSettings`
+
+### 30.3 Public Landing Page
+
+`index.html` served at root URL (`/`) — public info page explaining:
+- What the marketplace is and how it works (5-step flow)
+- Chainlink integration details (Functions, VRF, Automation, Price Feeds, CCIP, Reputation)
+- Supported chains (7 networks) and payment methods (9 options)
+- Key features: non-custodial escrow, fair assignment, on-chain reputation, AI decomposition
+
+### 30.4 Foundry Project
+
+`contracts/` directory with full Foundry setup:
+- 4 Solidity contracts in `contracts/src/`
+- Deployment script in `contracts/script/Deploy.s.sol`
+- Chainlink + OpenZeppelin dependencies via npm
+- `forge build` compiles all contracts
