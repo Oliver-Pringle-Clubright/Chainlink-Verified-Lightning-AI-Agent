@@ -14,9 +14,39 @@ public static class EthereumAccountProvider
         if (string.IsNullOrWhiteSpace(privateKeyPath))
             return null;
 
-        ValidateFilePath(privateKeyPath);
-        var privateKey = File.ReadAllText(privateKeyPath).Trim();
+        var resolvedPath = ResolveKeyPath(privateKeyPath);
+        ValidateFilePath(resolvedPath);
+        var privateKey = File.ReadAllText(resolvedPath).Trim();
         return new Account(privateKey);
+    }
+
+    /// <summary>
+    /// Resolves relative paths by searching: working dir, then up to 3 parent directories.
+    /// This handles dotnet run from src/LightningAgent.Api/ when secrets/ is at project root.
+    /// </summary>
+    private static string ResolveKeyPath(string path)
+    {
+        if (Path.IsPathRooted(path) && File.Exists(path))
+            return path;
+
+        if (File.Exists(path))
+            return Path.GetFullPath(path);
+
+        // Walk up directories looking for the file
+        var dir = Directory.GetCurrentDirectory();
+        for (int i = 0; i < 4; i++)
+        {
+            var candidate = Path.Combine(dir, path);
+            if (File.Exists(candidate))
+                return Path.GetFullPath(candidate);
+
+            var parent = Directory.GetParent(dir);
+            if (parent is null) break;
+            dir = parent.FullName;
+        }
+
+        // Return original path — will fail with FileNotFoundException (better than silent)
+        return path;
     }
 
     private static void ValidateFilePath(string path)
