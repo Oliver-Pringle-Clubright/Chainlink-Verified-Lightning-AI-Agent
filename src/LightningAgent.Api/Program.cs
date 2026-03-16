@@ -88,6 +88,7 @@ builder.Services.AddScoped<IPaymentProvider, LightningAgent.Engine.PaymentProvid
 builder.Services.AddScoped<LightningAgent.Engine.PaymentProviders.PaymentRouter>();
 builder.Services.Configure<VerificationSettings>(builder.Configuration.GetSection("Verification"));
 builder.Services.Configure<SpendLimitSettings>(builder.Configuration.GetSection("SpendLimits"));
+builder.Services.Configure<PlatformFeeSettings>(builder.Configuration.GetSection("PlatformFees"));
 builder.Services.Configure<WorkerAgentSettings>(builder.Configuration.GetSection("WorkerAgent"));
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));

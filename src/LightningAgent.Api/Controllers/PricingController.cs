@@ -23,6 +23,7 @@ public class PricingController : ControllerBase
     private readonly IPricingService _pricingService;
     private readonly ICoinGeckoClient _coinGeckoClient;
     private readonly CoinGeckoSettings _coinGeckoSettings;
+    private readonly PlatformFeeSettings _feeSettings;
     private readonly ILogger<PricingController> _logger;
 
     public PricingController(
@@ -30,12 +31,14 @@ public class PricingController : ControllerBase
         IPricingService pricingService,
         ICoinGeckoClient coinGeckoClient,
         IOptions<CoinGeckoSettings> coinGeckoSettings,
+        IOptions<PlatformFeeSettings> feeSettings,
         ILogger<PricingController> logger)
     {
         _priceCacheRepository = priceCacheRepository;
         _pricingService = pricingService;
         _coinGeckoClient = coinGeckoClient;
         _coinGeckoSettings = coinGeckoSettings.Value;
+        _feeSettings = feeSettings.Value;
         _logger = logger;
     }
 
@@ -292,5 +295,41 @@ public class PricingController : ControllerBase
             "USDTUSD" => "USDT/USD",
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Returns the platform fee schedule.
+    /// </summary>
+    [HttpGet("fees")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult GetFeeSchedule()
+    {
+        return Ok(new
+        {
+            commission = new
+            {
+                rate = _feeSettings.CommissionRate,
+                description = $"{_feeSettings.CommissionRate:P0} deducted from agent payout on each milestone completion"
+            },
+            taskPostingFee = new
+            {
+                amountSats = _feeSettings.TaskPostingFeeSats,
+                description = "Flat fee charged when creating a task (anti-spam)"
+            },
+            verificationFee = new
+            {
+                amountSats = _feeSettings.VerificationFeeSats,
+                description = "Per-milestone fee covering on-chain verification costs (gas + LINK)"
+            },
+            example = new
+            {
+                taskBudget = 10000,
+                postingFee = _feeSettings.TaskPostingFeeSats,
+                milestonePayout = 10000,
+                commission = (long)(10000 * _feeSettings.CommissionRate),
+                verificationFee = _feeSettings.VerificationFeeSats,
+                agentReceives = 10000 - (long)(10000 * _feeSettings.CommissionRate) - _feeSettings.VerificationFeeSats
+            }
+        });
     }
 }

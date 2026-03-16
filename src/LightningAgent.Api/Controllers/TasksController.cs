@@ -35,6 +35,7 @@ public class TasksController : ControllerBase
     private readonly ITaskQueue _taskQueue;
     private readonly TaskLifecycleWorkflow _workflow;
     private readonly IMetricsCollector _metrics;
+    private readonly PlatformFeeSettings _feeSettings;
     private readonly ILogger<TasksController> _logger;
 
     public TasksController(
@@ -47,6 +48,7 @@ public class TasksController : ControllerBase
         ITaskQueue taskQueue,
         TaskLifecycleWorkflow workflow,
         IMetricsCollector metrics,
+        IOptions<PlatformFeeSettings> feeSettings,
         ILogger<TasksController> logger)
     {
         _taskRepository = taskRepository;
@@ -58,6 +60,7 @@ public class TasksController : ControllerBase
         _taskQueue = taskQueue;
         _workflow = workflow;
         _metrics = metrics;
+        _feeSettings = feeSettings.Value;
         _logger = logger;
     }
 
@@ -101,6 +104,11 @@ public class TasksController : ControllerBase
         if (request.MaxPayoutSats > _spendLimits.DefaultPerTaskMaxSats)
             return BadRequest($"MaxPayoutSats ({request.MaxPayoutSats}) exceeds the per-task limit of {_spendLimits.DefaultPerTaskMaxSats} sats.");
 
+        // Ensure budget covers the posting fee
+        var postingFee = _feeSettings.TaskPostingFeeSats;
+        if (postingFee > 0 && request.MaxPayoutSats <= postingFee)
+            return BadRequest($"MaxPayoutSats must be greater than the task posting fee ({postingFee} sats).");
+
         // Validate task dependency if provided
         if (request.DependsOnTaskId.HasValue)
         {
@@ -142,7 +150,9 @@ public class TasksController : ControllerBase
             return BadRequest("Invalid foreign key reference in task data.");
         }
 
-        _logger.LogInformation("Created task {TaskId} (ext: {ExternalId})", id, externalId);
+        _logger.LogInformation(
+            "Created task {TaskId} (ext: {ExternalId}), posting fee: {Fee} sats",
+            id, externalId, postingFee);
         _metrics.IncrementTasksCreated();
 
         return Ok(new CreateTaskResponse
@@ -150,7 +160,9 @@ public class TasksController : ControllerBase
             TaskId = id,
             ExternalId = externalId,
             Status = TaskStatus.Pending.ToString(),
-            Message = "Task created successfully."
+            Message = postingFee > 0
+                ? $"Task created successfully. Posting fee: {postingFee} sats. Platform commission: {_feeSettings.CommissionRate:P0} on payouts."
+                : "Task created successfully."
         });
     }
 

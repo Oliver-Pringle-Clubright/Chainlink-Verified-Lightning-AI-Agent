@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace LightningAgent.Engine;
 
@@ -15,6 +17,7 @@ public class PaymentService : IPaymentService
     private readonly IMilestoneRepository _milestoneRepo;
     private readonly ILightningClient _lightning;
     private readonly IEventPublisher _eventPublisher;
+    private readonly PlatformFeeSettings _feeSettings;
     private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
@@ -24,6 +27,7 @@ public class PaymentService : IPaymentService
         IMilestoneRepository milestoneRepo,
         ILightningClient lightning,
         IEventPublisher eventPublisher,
+        IOptions<PlatformFeeSettings> feeSettings,
         ILogger<PaymentService> logger)
     {
         _agentRepo = agentRepo;
@@ -32,6 +36,7 @@ public class PaymentService : IPaymentService
         _milestoneRepo = milestoneRepo;
         _lightning = lightning;
         _eventPublisher = eventPublisher;
+        _feeSettings = feeSettings.Value;
         _logger = logger;
     }
 
@@ -42,21 +47,31 @@ public class PaymentService : IPaymentService
 
         var escrow = await _escrowRepo.GetByMilestoneIdAsync(milestoneId, ct);
 
+        // Calculate gross amount and platform commission
+        long grossAmount = escrow is not null && escrow.Status == EscrowStatus.Settled
+            ? escrow.AmountSats
+            : milestone.PayoutSats;
+
+        long commissionSats = (long)(grossAmount * _feeSettings.CommissionRate);
+        long verificationFeeSats = _feeSettings.VerificationFeeSats;
+        long totalFees = commissionSats + verificationFeeSats;
+        long agentPayout = Math.Max(1, grossAmount - totalFees);
+
+        _logger.LogInformation(
+            "Milestone {MilestoneId}: gross={Gross}, commission={Commission} ({Rate:P0}), verificationFee={VFee}, agentPayout={Payout}",
+            milestoneId, grossAmount, commissionSats, _feeSettings.CommissionRate, verificationFeeSats, agentPayout);
+
         Payment payment;
 
         if (escrow is not null && escrow.Status == EscrowStatus.Settled)
         {
-            _logger.LogInformation(
-                "Processing escrow-based payment for milestone {MilestoneId} (escrow {EscrowId})",
-                milestoneId, escrow.Id);
-
             payment = new Payment
             {
                 EscrowId = escrow.Id,
                 TaskId = milestone.TaskId,
                 MilestoneId = milestone.Id,
-                AgentId = 0, // To be set by caller or resolved upstream
-                AmountSats = escrow.AmountSats,
+                AgentId = 0,
+                AmountSats = agentPayout,
                 PaymentHash = escrow.PaymentHash,
                 PaymentType = PaymentType.Escrow,
                 Status = PaymentStatus.Settled,
@@ -66,16 +81,12 @@ public class PaymentService : IPaymentService
         }
         else
         {
-            _logger.LogInformation(
-                "Processing direct payment for milestone {MilestoneId} (no settled escrow)",
-                milestoneId);
-
             payment = new Payment
             {
                 TaskId = milestone.TaskId,
                 MilestoneId = milestone.Id,
                 AgentId = 0,
-                AmountSats = milestone.PayoutSats,
+                AmountSats = agentPayout,
                 PaymentType = PaymentType.Direct,
                 Status = PaymentStatus.Settled,
                 CreatedAt = DateTime.UtcNow,
@@ -85,15 +96,33 @@ public class PaymentService : IPaymentService
 
         payment.Id = await _paymentRepo.CreateAsync(payment, ct);
 
+        // Record platform fees
+        if (commissionSats > 0)
+        {
+            await _paymentRepo.CreateAsync(new Payment
+            {
+                TaskId = milestone.TaskId,
+                MilestoneId = milestone.Id,
+                AgentId = 0,
+                AmountSats = commissionSats,
+                PaymentType = PaymentType.Direct,
+                PaymentMethod = PaymentMethod.Lightning,
+                Status = PaymentStatus.Settled,
+                CreatedAt = DateTime.UtcNow,
+                SettledAt = DateTime.UtcNow
+            }, ct);
+            _logger.LogInformation("Platform commission: {Amount} sats (3%) for milestone {MilestoneId}", commissionSats, milestoneId);
+        }
+
         // Mark the milestone as paid
         milestone.PaidAt = DateTime.UtcNow;
         await _milestoneRepo.UpdateAsync(milestone, ct);
 
         _logger.LogInformation(
-            "Payment {PaymentId} ({PaymentType}) created for milestone {MilestoneId}",
-            payment.Id, payment.PaymentType, milestoneId);
+            "Payment {PaymentId} ({PaymentType}) created for milestone {MilestoneId}: {AgentPayout} sats to agent",
+            payment.Id, payment.PaymentType, milestoneId, agentPayout);
 
-        await _eventPublisher.PublishPaymentSentAsync(payment.Id, payment.AgentId, payment.AmountSats, ct);
+        await _eventPublisher.PublishPaymentSentAsync(payment.Id, payment.AgentId, agentPayout, ct);
 
         return payment;
     }
