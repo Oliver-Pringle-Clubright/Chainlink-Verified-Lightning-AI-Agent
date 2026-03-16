@@ -46,6 +46,15 @@ public class ApiKeyAuthMiddleware
         var devModeEnabled = string.Equals(
             _configuration["ApiSecurity:DevMode"], "true", StringComparison.OrdinalIgnoreCase);
 
+        // DevMode bypass: allow unauthenticated access for development
+        if (devModeEnabled && !context.Request.Headers.ContainsKey(ApiKeyHeader))
+        {
+            context.Items["DevMode"] = true;
+            context.Items["IsAdmin"] = true;
+            await _next(context);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(configuredKey))
         {
             if (devModeEnabled)
