@@ -1,0 +1,416 @@
+using LightningAgentMarketPlace.Core.Enums;
+using LightningAgentMarketPlace.Core.Interfaces.Data;
+using LightningAgentMarketPlace.Core.Models;
+using Microsoft.Data.Sqlite;
+using TaskStatus = LightningAgentMarketPlace.Core.Enums.TaskStatus;
+
+namespace LightningAgentMarketPlace.Data.Repositories;
+
+public class TaskRepository : ITaskRepository
+{
+    private readonly SqliteConnectionFactory _connectionFactory;
+
+    private const string SelectColumns = "Id, ExternalId, ParentTaskId, ClientId, Title, Description, TaskType, Status, AcpSpec, VerificationCriteria, MaxPayoutSats, ActualPayoutSats, PriceUsd, AssignedAgentId, Priority, CreatedAt, UpdatedAt, CompletedAt";
+
+    public TaskRepository(SqliteConnectionFactory connectionFactory)
+    {
+        _connectionFactory = connectionFactory;
+    }
+
+    public async Task<TaskItem?> GetByIdAsync(int id, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapTask(reader) : null;
+    }
+
+    public async Task<TaskItem?> GetByExternalIdAsync(string externalId, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE ExternalId = @ExternalId";
+        cmd.Parameters.AddWithValue("@ExternalId", externalId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapTask(reader) : null;
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByStatusAsync(TaskStatus status, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE Status = @Status";
+        cmd.Parameters.AddWithValue("@Status", status.ToString());
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync())
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByAssignedAgentAsync(int agentId, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE AssignedAgentId = @AgentId";
+        cmd.Parameters.AddWithValue("@AgentId", agentId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync())
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByClientIdAsync(string clientId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE ClientId = @ClientId";
+        cmd.Parameters.AddWithValue("@ClientId", clientId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync())
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetSubtasksAsync(int parentTaskId, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE ParentTaskId = @ParentTaskId";
+        cmd.Parameters.AddWithValue("@ParentTaskId", parentTaskId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync())
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetCompletedSinceAsync(DateTime since, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE Status = @Status AND CompletedAt IS NOT NULL AND CompletedAt >= @Since";
+        cmd.Parameters.AddWithValue("@Status", TaskStatus.Completed.ToString());
+        cmd.Parameters.AddWithValue("@Since", since.ToString("o"));
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<int> GetCountAsync(TaskStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM Tasks WHERE (@Status IS NULL OR Status = @Status)";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetPagedAsync(int offset, int limit, TaskStatus? status = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE (@Status IS NULL OR Status = @Status) ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        cmd.Parameters.AddWithValue("@Status", status.HasValue ? status.Value.ToString() : DBNull.Value);
+        cmd.Parameters.AddWithValue("@Limit", limit);
+        cmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    public async Task<int> GetFilteredCountAsync(TaskStatus? status = null, int? agentId = null, string? clientId = null, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        var where = BuildWhereClause(cmd, status, agentId, clientId, cursor: null);
+        cmd.CommandText = $"SELECT COUNT(*) FROM Tasks{where}";
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetFilteredPagedAsync(
+        int offset,
+        int limit,
+        TaskStatus? status = null,
+        int? agentId = null,
+        string? clientId = null,
+        int? cursor = null,
+        CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        var where = BuildWhereClause(cmd, status, agentId, clientId, cursor);
+
+        if (cursor.HasValue)
+        {
+            // Keyset pagination: no OFFSET needed, cursor condition is in WHERE
+            cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks{where} ORDER BY Id DESC LIMIT @Limit";
+        }
+        else
+        {
+            // Classic offset pagination
+            cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks{where} ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+            cmd.Parameters.AddWithValue("@Offset", offset);
+        }
+
+        cmd.Parameters.AddWithValue("@Limit", limit);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Builds a WHERE clause string and adds corresponding parameters to the command.
+    /// Returns a string like " WHERE cond1 AND cond2" or empty string if no conditions.
+    /// </summary>
+    private static string BuildWhereClause(SqliteCommand cmd, TaskStatus? status, int? agentId, string? clientId, int? cursor)
+    {
+        var conditions = new List<string>();
+
+        if (status.HasValue)
+        {
+            conditions.Add("Status = @Status");
+            cmd.Parameters.AddWithValue("@Status", status.Value.ToString());
+        }
+
+        if (agentId.HasValue)
+        {
+            conditions.Add("AssignedAgentId = @AgentId");
+            cmd.Parameters.AddWithValue("@AgentId", agentId.Value);
+        }
+
+        if (!string.IsNullOrEmpty(clientId))
+        {
+            conditions.Add("ClientId = @ClientId");
+            cmd.Parameters.AddWithValue("@ClientId", clientId);
+        }
+
+        if (cursor.HasValue)
+        {
+            conditions.Add("Id < @Cursor");
+            cmd.Parameters.AddWithValue("@Cursor", cursor.Value);
+        }
+
+        return conditions.Count > 0
+            ? " WHERE " + string.Join(" AND ", conditions)
+            : "";
+    }
+
+    public async Task<(IReadOnlyList<TaskItem> Items, int TotalCount)> SearchAsync(
+        string query,
+        int offset,
+        int limit,
+        TaskStatus? status = null,
+        CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var likeParam = $"%{query}%";
+
+        // Count query
+        using var countCmd = connection.CreateCommand();
+        var whereClause = "(Title LIKE @Query OR Description LIKE @Query)";
+        if (status.HasValue)
+            whereClause += " AND Status = @Status";
+
+        countCmd.CommandText = $"SELECT COUNT(*) FROM Tasks WHERE {whereClause}";
+        countCmd.Parameters.AddWithValue("@Query", likeParam);
+        if (status.HasValue)
+            countCmd.Parameters.AddWithValue("@Status", status.Value.ToString());
+
+        var totalCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct));
+
+        // Data query
+        using var dataCmd = connection.CreateCommand();
+        dataCmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE {whereClause} ORDER BY Id DESC LIMIT @Limit OFFSET @Offset";
+        dataCmd.Parameters.AddWithValue("@Query", likeParam);
+        if (status.HasValue)
+            dataCmd.Parameters.AddWithValue("@Status", status.Value.ToString());
+        dataCmd.Parameters.AddWithValue("@Limit", limit);
+        dataCmd.Parameters.AddWithValue("@Offset", offset);
+
+        using var reader = await dataCmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+
+        return (results, totalCount);
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return Array.Empty<TaskItem>();
+
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+
+        // Build parameterized IN clause
+        var paramNames = new List<string>();
+        for (int i = 0; i < idList.Count; i++)
+        {
+            var paramName = $"@Id{i}";
+            paramNames.Add(paramName);
+            cmd.Parameters.AddWithValue(paramName, idList[i]);
+        }
+
+        cmd.CommandText = $"SELECT {SelectColumns} FROM Tasks WHERE Id IN ({string.Join(",", paramNames)})";
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        var results = new List<TaskItem>();
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(MapTask(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<int> CreateAsync(TaskItem task, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"INSERT INTO Tasks (ExternalId, ParentTaskId, ClientId, Title, Description, TaskType, Status, AcpSpec, VerificationCriteria, MaxPayoutSats, ActualPayoutSats, PriceUsd, AssignedAgentId, Priority, CreatedAt, UpdatedAt, CompletedAt)
+            VALUES (@ExternalId, @ParentTaskId, @ClientId, @Title, @Description, @TaskType, @Status, @AcpSpec, @VerificationCriteria, @MaxPayoutSats, @ActualPayoutSats, @PriceUsd, @AssignedAgentId, @Priority, @CreatedAt, @UpdatedAt, @CompletedAt);
+            SELECT last_insert_rowid();";
+        cmd.Parameters.AddWithValue("@ExternalId", task.ExternalId);
+        cmd.Parameters.AddWithValue("@ParentTaskId", (object?)task.ParentTaskId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ClientId", task.ClientId);
+        cmd.Parameters.AddWithValue("@Title", task.Title);
+        cmd.Parameters.AddWithValue("@Description", task.Description);
+        cmd.Parameters.AddWithValue("@TaskType", task.TaskType.ToString());
+        cmd.Parameters.AddWithValue("@Status", task.Status.ToString());
+        cmd.Parameters.AddWithValue("@AcpSpec", (object?)task.AcpSpec ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@VerificationCriteria", (object?)task.VerificationCriteria ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@MaxPayoutSats", task.MaxPayoutSats);
+        cmd.Parameters.AddWithValue("@ActualPayoutSats", task.ActualPayoutSats);
+        cmd.Parameters.AddWithValue("@PriceUsd", (object?)task.PriceUsd ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AssignedAgentId", (object?)task.AssignedAgentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Priority", task.Priority);
+        cmd.Parameters.AddWithValue("@CreatedAt", task.CreatedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("@UpdatedAt", task.UpdatedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("@CompletedAt", task.CompletedAt.HasValue ? task.CompletedAt.Value.ToString("o") : DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return Convert.ToInt32(result);
+    }
+
+    public async Task UpdateAsync(TaskItem task, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = @"UPDATE Tasks SET ExternalId = @ExternalId, ParentTaskId = @ParentTaskId, ClientId = @ClientId,
+            Title = @Title, Description = @Description, TaskType = @TaskType, Status = @Status,
+            AcpSpec = @AcpSpec, VerificationCriteria = @VerificationCriteria, MaxPayoutSats = @MaxPayoutSats,
+            ActualPayoutSats = @ActualPayoutSats, PriceUsd = @PriceUsd, AssignedAgentId = @AssignedAgentId,
+            Priority = @Priority, UpdatedAt = @UpdatedAt, CompletedAt = @CompletedAt
+            WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", task.Id);
+        cmd.Parameters.AddWithValue("@ExternalId", task.ExternalId);
+        cmd.Parameters.AddWithValue("@ParentTaskId", (object?)task.ParentTaskId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ClientId", task.ClientId);
+        cmd.Parameters.AddWithValue("@Title", task.Title);
+        cmd.Parameters.AddWithValue("@Description", task.Description);
+        cmd.Parameters.AddWithValue("@TaskType", task.TaskType.ToString());
+        cmd.Parameters.AddWithValue("@Status", task.Status.ToString());
+        cmd.Parameters.AddWithValue("@AcpSpec", (object?)task.AcpSpec ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@VerificationCriteria", (object?)task.VerificationCriteria ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@MaxPayoutSats", task.MaxPayoutSats);
+        cmd.Parameters.AddWithValue("@ActualPayoutSats", task.ActualPayoutSats);
+        cmd.Parameters.AddWithValue("@PriceUsd", (object?)task.PriceUsd ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AssignedAgentId", (object?)task.AssignedAgentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Priority", task.Priority);
+        cmd.Parameters.AddWithValue("@UpdatedAt", task.UpdatedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("@CompletedAt", task.CompletedAt.HasValue ? task.CompletedAt.Value.ToString("o") : DBNull.Value);
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task UpdateStatusAsync(int id, TaskStatus status, CancellationToken ct = default)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE Tasks SET Status = @Status, UpdatedAt = @UpdatedAt WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Status", status.ToString());
+        cmd.Parameters.AddWithValue("@UpdatedAt", DateTime.UtcNow.ToString("o"));
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM Tasks WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static TaskItem MapTask(SqliteDataReader reader)
+    {
+        return new TaskItem
+        {
+            Id = reader.GetInt32(0),
+            ExternalId = reader.GetString(1),
+            ParentTaskId = reader.IsDBNull(2) ? null : reader.GetInt32(2),
+            ClientId = reader.GetString(3),
+            Title = reader.GetString(4),
+            Description = reader.GetString(5),
+            TaskType = Enum.Parse<TaskType>(reader.GetString(6)),
+            Status = Enum.Parse<TaskStatus>(reader.GetString(7)),
+            AcpSpec = reader.IsDBNull(8) ? null : reader.GetString(8),
+            VerificationCriteria = reader.IsDBNull(9) ? null : reader.GetString(9),
+            MaxPayoutSats = reader.GetInt64(10),
+            ActualPayoutSats = reader.GetInt64(11),
+            PriceUsd = reader.IsDBNull(12) ? null : reader.GetDouble(12),
+            AssignedAgentId = reader.IsDBNull(13) ? null : reader.GetInt32(13),
+            Priority = reader.GetInt32(14),
+            CreatedAt = DateTime.Parse(reader.GetString(15)),
+            UpdatedAt = DateTime.Parse(reader.GetString(16)),
+            CompletedAt = reader.IsDBNull(17) ? null : DateTime.Parse(reader.GetString(17))
+        };
+    }
+}

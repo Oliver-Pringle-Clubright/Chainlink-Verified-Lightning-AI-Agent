@@ -1458,7 +1458,7 @@ Configuration is read from `appsettings.json` (and environment-specific override
 
 ### 4.2 Lightning
 
-**Settings class:** `LightningAgent.Core.Configuration.LightningSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.LightningSettings`
 **Config path:** `Lightning`
 
 | Property | Type | Default | Description |
@@ -1470,7 +1470,7 @@ Configuration is read from `appsettings.json` (and environment-specific override
 
 ### 4.3 Chainlink
 
-**Settings class:** `LightningAgent.Core.Configuration.ChainlinkSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.ChainlinkSettings`
 **Config path:** `Chainlink`
 
 | Property | Type | Default | Description |
@@ -1494,7 +1494,7 @@ Configuration is read from `appsettings.json` (and environment-specific override
 
 ### 4.4 Acp
 
-**Settings class:** `LightningAgent.Core.Configuration.AcpSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.AcpSettings`
 **Config path:** `Acp`
 
 | Property | Type | Default | Description |
@@ -1510,7 +1510,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.5 ClaudeAi
 
-**Settings class:** `LightningAgent.Core.Configuration.ClaudeAiSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.ClaudeAiSettings`
 **Config path:** `ClaudeAi`
 
 | Property | Type | Default | Description |
@@ -1522,7 +1522,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.6 Escrow
 
-**Settings class:** `LightningAgent.Core.Configuration.EscrowSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.EscrowSettings`
 **Config path:** `Escrow`
 
 | Property | Type | Default | Description |
@@ -1533,7 +1533,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.7 Pricing
 
-**Settings class:** `LightningAgent.Core.Configuration.PricingSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.PricingSettings`
 **Config path:** `Pricing`
 
 | Property | Type | Default | Description |
@@ -1544,7 +1544,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.8 Verification
 
-**Settings class:** `LightningAgent.Core.Configuration.VerificationSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.VerificationSettings`
 **Config path:** `Verification`
 
 | Property | Type | Default | Description |
@@ -1555,7 +1555,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.9 SpendLimits
 
-**Settings class:** `LightningAgent.Core.Configuration.SpendLimitSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.SpendLimitSettings`
 **Config path:** `SpendLimits`
 
 | Property | Type | Default | Description |
@@ -1566,7 +1566,7 @@ Task posting uses retry logic with 3 attempts and exponential backoff (1s, 4s, 1
 
 ### 4.10 WorkerAgent
 
-**Settings class:** `LightningAgent.Core.Configuration.WorkerAgentSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.WorkerAgentSettings`
 **Config path:** `WorkerAgent`
 
 | Property | Type | Default | Description |
@@ -1588,19 +1588,19 @@ Read directly from `IConfiguration` (no strongly-typed settings class).
 
 ### 4.12 Jwt
 
-**Settings class:** `LightningAgent.Core.Configuration.JwtSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.JwtSettings`
 **Config path:** `Jwt`
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `Secret` | string | `""` | HMAC-SHA256 signing key for JWT tokens. When empty, JWT authentication is not registered. Must be at least 32 characters for adequate security. |
-| `Issuer` | string | `LightningAgent` | JWT issuer claim (`iss`). |
-| `Audience` | string | `LightningAgent` | JWT audience claim (`aud`). |
+| `Issuer` | string | `LightningAgentMarketPlace` | JWT issuer claim (`iss`). |
+| `Audience` | string | `LightningAgentMarketPlace` | JWT audience claim (`aud`). |
 | `ExpiryMinutes` | int | `60` | Token lifetime in minutes. |
 
 ### 4.13 OpenRouter
 
-**Settings class:** `LightningAgent.Core.Configuration.OpenRouterSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.OpenRouterSettings`
 **Config path:** `OpenRouter`
 
 | Property | Type | Default | Description |
@@ -1612,7 +1612,7 @@ Read directly from `IConfiguration` (no strongly-typed settings class).
 
 ### 4.14 Network
 
-**Settings class:** `LightningAgent.Core.Configuration.NetworkSettings`
+**Settings class:** `LightningAgentMarketPlace.Core.Configuration.NetworkSettings`
 **Config path:** `Network`
 
 | Property | Type | Default | Description |
@@ -1673,7 +1673,7 @@ Plugins are registered in `AddVerificationServices()` and run alongside the stan
 
 ## 6. Reputation Algorithm
 
-Implemented in `LightningAgent.Engine.ReputationService`. Updated after every milestone submission via `UpdateReputationAsync()`.
+Implemented in `LightningAgentMarketPlace.Engine.ReputationService`. Updated after every milestone submission via `UpdateReputationAsync()`.
 
 ### Input Counters
 
@@ -1719,7 +1719,7 @@ Final score = clamp(ReputationScore, 0.0, 1.0)
 
 ## 7. Agent Matching Algorithm
 
-Implemented in `LightningAgent.Engine.AgentMatcher`. The `FindBestAgentAsync()` method ranks all active agents by match score for a given task.
+Implemented in `LightningAgentMarketPlace.Engine.AgentMatcher`. The `FindBestAgentAsync()` method ranks all active agents by match score for a given task.
 
 ### Process
 
@@ -1760,7 +1760,7 @@ matchScore       = reputationWeight + priceWeight + capacityWeight
 
 ## 8. Escrow Lifecycle
 
-The system uses LND HODL invoices for trustless escrow. Implemented in `LightningAgent.Engine.EscrowManager`.
+The system uses LND HODL invoices for trustless escrow. Implemented in `LightningAgentMarketPlace.Engine.EscrowManager`.
 
 ### State Machine
 
@@ -1814,18 +1814,18 @@ All background services extend `BackgroundService` and run as hosted services re
 
 | Service | Class | Interval | Purpose |
 |---------|-------|----------|---------|
-| **EscrowExpiryChecker** | `LightningAgent.Engine.BackgroundJobs.EscrowExpiryChecker` | 60 seconds | Scans for HODL invoices in `Held` status past their `ExpiresAt` timestamp and cancels them via `IEscrowManager.CheckExpiredEscrowsAsync()`. |
-| **SpendLimitResetter** | `LightningAgent.Engine.BackgroundJobs.SpendLimitResetter` | 1 hour | Resets `CurrentSpentSats` to 0 for spend limit periods that have expired (`PeriodEnd < now`) via `ISpendLimitService.ResetExpiredPeriodsAsync()`. |
-| **ChainlinkResponsePoller** | `LightningAgent.Engine.BackgroundJobs.ChainlinkResponsePoller` | 30 seconds | Queries `IVerificationRepository.GetPendingChainlinkAsync()` for verifications awaiting Chainlink Functions responses, calls `IChainlinkFunctionsClient.GetResponseAsync()`, and updates the verification with the score, pass/fail result, and transaction hash. |
-| **VrfAuditSampler** | `LightningAgent.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF via async fulfillment (consumer contract), uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Falls back to `Random.Shared` if VRF is not configured or times out (90 seconds). |
-| **VrfResponsePoller** | `LightningAgent.Engine.BackgroundJobs.VrfResponsePoller` | 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. When fulfilled, invokes the registered callback with the random words. Times out requests after 40 attempts (~10 minutes). |
-| **PriceFeedRefresher** | `LightningAgent.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Refreshes all configured price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH) from Chainlink oracles. Each pair is fetched independently with its own error handling -- a failure in one pair does not block others. |
-| **AgentWorkerService** | `LightningAgent.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Now uses `SemaphoreSlim`-bounded `Task.WhenAll` for concurrent execution, configurable via `WorkerAgentSettings.MaxConcurrentAgents` (default 5). Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch, MaxConcurrentAgents). |
-| **EscrowRetryService** | `LightningAgent.Engine.BackgroundJobs.EscrowRetryService` | 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on initial attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, updates escrow to `Held` with the new invoice. On failure, logs warning and retries next cycle. |
-| **InvoiceStatusPoller** | `LightningAgent.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |
-| **SecretRotationService** | `LightningAgent.Engine.Services.SecretRotationService` | 6 hours | Validates Claude and OpenRouter API keys by issuing lightweight requests to `GET /v1/models` (Anthropic) and `GET /models` (OpenRouter). Logs warnings when keys are invalid (HTTP 401) or unreachable. |
-| **TaskQueueProcessor** | `LightningAgent.Engine.Queue.TaskQueueProcessor` | Continuous | Dequeues task IDs from `ITaskQueue` (backed by `System.Threading.Channels.Channel<int>`) and orchestrates each via `ITaskOrchestrator.OrchestrateTaskAsync()` inside a fresh DI scope. |
-| **DataCleanupService** | `LightningAgent.Engine.BackgroundJobs.DataCleanupService` | 6 hours | Cleans stale data: price cache entries older than 24 hours, audit log entries older than 90 days, and webhook delivery log entries older than 30 days. |
+| **EscrowExpiryChecker** | `LightningAgentMarketPlace.Engine.BackgroundJobs.EscrowExpiryChecker` | 60 seconds | Scans for HODL invoices in `Held` status past their `ExpiresAt` timestamp and cancels them via `IEscrowManager.CheckExpiredEscrowsAsync()`. |
+| **SpendLimitResetter** | `LightningAgentMarketPlace.Engine.BackgroundJobs.SpendLimitResetter` | 1 hour | Resets `CurrentSpentSats` to 0 for spend limit periods that have expired (`PeriodEnd < now`) via `ISpendLimitService.ResetExpiredPeriodsAsync()`. |
+| **ChainlinkResponsePoller** | `LightningAgentMarketPlace.Engine.BackgroundJobs.ChainlinkResponsePoller` | 30 seconds | Queries `IVerificationRepository.GetPendingChainlinkAsync()` for verifications awaiting Chainlink Functions responses, calls `IChainlinkFunctionsClient.GetResponseAsync()`, and updates the verification with the score, pass/fail result, and transaction hash. |
+| **VrfAuditSampler** | `LightningAgentMarketPlace.Engine.BackgroundJobs.VrfAuditSampler` | 5 minutes | Requests randomness from Chainlink VRF via async fulfillment (consumer contract), uses it to select a random completed task from the last 24 hours, then runs fraud detection (`IFraudDetector.DetectSybilAsync()` and `GetAnomalyScoreAsync()`) on the assigned agent. Falls back to `Random.Shared` if VRF is not configured or times out (90 seconds). |
+| **VrfResponsePoller** | `LightningAgentMarketPlace.Engine.BackgroundJobs.VrfResponsePoller` | 15 seconds | Polls pending VRF requests by reading the consumer contract's `getRequestStatus(requestId)`. When fulfilled, invokes the registered callback with the random words. Times out requests after 40 attempts (~10 minutes). |
+| **PriceFeedRefresher** | `LightningAgentMarketPlace.Engine.BackgroundJobs.PriceFeedRefresher` | 5 minutes | Refreshes all configured price feed pairs (BTC/USD, ETH/USD, LINK/USD, LINK/ETH) from Chainlink oracles. Each pair is fetched independently with its own error handling -- a failure in one pair does not block others. |
+| **AgentWorkerService** | `LightningAgentMarketPlace.Engine.BackgroundJobs.AgentWorkerService` | 30 seconds | Iterates all active agents, checks for assigned tasks, builds AI prompts from task+milestone descriptions, calls Claude to generate output, and submits results via `TaskLifecycleWorkflow.ProcessMilestoneSubmissionAsync()`. Now uses `SemaphoreSlim`-bounded `Task.WhenAll` for concurrent execution, configurable via `WorkerAgentSettings.MaxConcurrentAgents` (default 5). Configurable via `WorkerAgentSettings` (Enabled, PollingIntervalSeconds, MaxTasksPerBatch, MaxConcurrentAgents). |
+| **EscrowRetryService** | `LightningAgentMarketPlace.Engine.BackgroundJobs.EscrowRetryService` | 5 minutes | Queries escrows with `PendingChannel` status (HODL invoice creation failed on initial attempt). Retries HODL invoice creation via `ILightningClient.CreateHodlInvoiceAsync()`. On success, updates escrow to `Held` with the new invoice. On failure, logs warning and retries next cycle. |
+| **InvoiceStatusPoller** | `LightningAgentMarketPlace.Engine.BackgroundJobs.InvoiceStatusPoller` | 30 seconds | Polls all `Held` escrows and checks their LND invoice state via `ILightningClient.GetInvoiceStateAsync()`. Settles escrows whose invoices have been externally settled (`SETTLED` state). Cancels escrows whose invoices have been externally cancelled (`CANCELLED`/`CANCELED` state). |
+| **SecretRotationService** | `LightningAgentMarketPlace.Engine.Services.SecretRotationService` | 6 hours | Validates Claude and OpenRouter API keys by issuing lightweight requests to `GET /v1/models` (Anthropic) and `GET /models` (OpenRouter). Logs warnings when keys are invalid (HTTP 401) or unreachable. |
+| **TaskQueueProcessor** | `LightningAgentMarketPlace.Engine.Queue.TaskQueueProcessor` | Continuous | Dequeues task IDs from `ITaskQueue` (backed by `System.Threading.Channels.Channel<int>`) and orchestrates each via `ITaskOrchestrator.OrchestrateTaskAsync()` inside a fresh DI scope. |
+| **DataCleanupService** | `LightningAgentMarketPlace.Engine.BackgroundJobs.DataCleanupService` | 6 hours | Cleans stale data: price cache entries older than 24 hours, audit log entries older than 90 days, and webhook delivery log entries older than 30 days. |
 
 All services use graceful shutdown: they catch `OperationCanceledException` when the `stoppingToken` is cancelled and exit cleanly. Services that require scoped dependencies (repositories, clients) create a scope via `IServiceScopeFactory`.
 
@@ -1875,52 +1875,52 @@ The `ErrorMessage` column captures the last failure reason (e.g., HTTP status co
 
 ### NuGet Packages
 
-#### LightningAgent.Core
+#### LightningAgentMarketPlace.Core
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Logging.Abstractions` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Options` | 10.0.0-preview.* |
 
-#### LightningAgent.Data
+#### LightningAgentMarketPlace.Data
 | Package | Version |
 |---------|---------|
 | `Microsoft.Data.Sqlite` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Logging.Abstractions` | 10.0.0-preview.* |
 
-#### LightningAgent.Lightning
+#### LightningAgentMarketPlace.Lightning
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
-#### LightningAgent.Chainlink
+#### LightningAgentMarketPlace.Chainlink
 | Package | Version |
 |---------|---------|
 | `Nethereum.Web3` | 4.* |
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
 
-#### LightningAgent.Acp
+#### LightningAgentMarketPlace.Acp
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
-#### LightningAgent.AI
+#### LightningAgentMarketPlace.AI
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Http` | 10.0.0-preview.* |
 | `Microsoft.Extensions.Http.Resilience` | 10.0.0-preview.* |
 
-#### LightningAgent.Verification
+#### LightningAgentMarketPlace.Verification
 *(No direct NuGet packages -- depends on project references only)*
 
-#### LightningAgent.Engine
+#### LightningAgentMarketPlace.Engine
 | Package | Version |
 |---------|---------|
 | `Microsoft.Extensions.Hosting.Abstractions` | 10.0.0-preview.* |
 
-#### LightningAgent.Api
+#### LightningAgentMarketPlace.Api
 | Package | Version |
 |---------|---------|
 | `Microsoft.AspNetCore.OpenApi` | 10.0.1 |
@@ -1929,7 +1929,7 @@ The `ErrorMessage` column captures the last failure reason (e.g., HTTP status co
 | `Scalar.AspNetCore` | latest |
 | `System.IdentityModel.Tokens.Jwt` | latest |
 
-#### LightningAgent.Tests
+#### LightningAgentMarketPlace.Tests
 | Package | Version |
 |---------|---------|
 | `Microsoft.NET.Test.Sdk` | 17.14.1 |
@@ -1946,54 +1946,54 @@ The solution contains 10 projects across 2 solution folders (`src/` and `tests/`
 ### Dependency Graph
 
 ```
-LightningAgent.Core          (no project dependencies -- foundation layer)
+LightningAgentMarketPlace.Core          (no project dependencies -- foundation layer)
     ^
     |
-    +-- LightningAgent.Data        (Core)
-    +-- LightningAgent.Lightning   (Core)
-    +-- LightningAgent.Chainlink   (Core)
-    +-- LightningAgent.Acp         (Core)
-    +-- LightningAgent.AI          (Core)
+    +-- LightningAgentMarketPlace.Data        (Core)
+    +-- LightningAgentMarketPlace.Lightning   (Core)
+    +-- LightningAgentMarketPlace.Chainlink   (Core)
+    +-- LightningAgentMarketPlace.Acp         (Core)
+    +-- LightningAgentMarketPlace.AI          (Core)
     |
-    +-- LightningAgent.Verification (Core, AI)
+    +-- LightningAgentMarketPlace.Verification (Core, AI)
     |
-    +-- LightningAgent.Engine       (Core, Data, Lightning, Chainlink, AI, Verification, Acp)
+    +-- LightningAgentMarketPlace.Engine       (Core, Data, Lightning, Chainlink, AI, Verification, Acp)
     |
-    +-- LightningAgent.Api          (Core, Data, Lightning, Chainlink, Acp, AI, Verification, Engine)
+    +-- LightningAgentMarketPlace.Api          (Core, Data, Lightning, Chainlink, Acp, AI, Verification, Engine)
 
-LightningAgent.Tests          (test project -- references as needed)
+LightningAgentMarketPlace.Tests          (test project -- references as needed)
 ```
 
 ### Detailed Project References
 
 | Project | References |
 |---------|-----------|
-| **LightningAgent.Core** | *(none)* |
-| **LightningAgent.Data** | Core |
-| **LightningAgent.Lightning** | Core |
-| **LightningAgent.Chainlink** | Core |
-| **LightningAgent.Acp** | Core |
-| **LightningAgent.AI** | Core |
-| **LightningAgent.Verification** | Core, AI |
-| **LightningAgent.Engine** | Core, Data, Lightning, Chainlink, AI, Verification, Acp |
-| **LightningAgent.Api** | Core, Data, Lightning, Chainlink, Acp, AI, Verification, Engine |
-| **LightningAgent.Tests** | *(test dependencies)* |
+| **LightningAgentMarketPlace.Core** | *(none)* |
+| **LightningAgentMarketPlace.Data** | Core |
+| **LightningAgentMarketPlace.Lightning** | Core |
+| **LightningAgentMarketPlace.Chainlink** | Core |
+| **LightningAgentMarketPlace.Acp** | Core |
+| **LightningAgentMarketPlace.AI** | Core |
+| **LightningAgentMarketPlace.Verification** | Core, AI |
+| **LightningAgentMarketPlace.Engine** | Core, Data, Lightning, Chainlink, AI, Verification, Acp |
+| **LightningAgentMarketPlace.Api** | Core, Data, Lightning, Chainlink, Acp, AI, Verification, Engine |
+| **LightningAgentMarketPlace.Tests** | *(test dependencies)* |
 
 ### Architecture Layers
 
 ```
 +--------------------------------------------------+
-|                  LightningAgent.Api               |  <-- Presentation (Controllers, Hubs, Middleware)
+|                  LightningAgentMarketPlace.Api               |  <-- Presentation (Controllers, Hubs, Middleware)
 +--------------------------------------------------+
-|                LightningAgent.Engine              |  <-- Business Logic (Workflows, Services, Background Jobs)
+|                LightningAgentMarketPlace.Engine              |  <-- Business Logic (Workflows, Services, Background Jobs)
 +--------------------------------------------------+
-|  LightningAgent.   | LightningAgent.  | LightningAgent.  |
+|  LightningAgentMarketPlace.   | LightningAgentMarketPlace.  | LightningAgentMarketPlace.  |
 |  Verification      | AI               | Data             |  <-- Domain Services
 +--------------------+------------------+------------------+
-|  LightningAgent.   | LightningAgent.  | LightningAgent.  |
+|  LightningAgentMarketPlace.   | LightningAgentMarketPlace.  | LightningAgentMarketPlace.  |
 |  Lightning         | Chainlink        | Acp              |  <-- External Integration
 +--------------------+------------------+------------------+
-|                  LightningAgent.Core              |  <-- Domain Models, Interfaces, Configuration, Enums
+|                  LightningAgentMarketPlace.Core              |  <-- Domain Models, Interfaces, Configuration, Enums
 +--------------------------------------------------+
 ```
 
@@ -2014,7 +2014,7 @@ Defined in `Directory.Build.props` and inherited by all projects:
 
 ### 13.1 Preimage Encryption
 
-`PreimageProtector` is a static helper class in `LightningAgent.Engine.Security` that provides AES-256-GCM encryption for HODL invoice preimages at rest.
+`PreimageProtector` is a static helper class in `LightningAgentMarketPlace.Engine.Security` that provides AES-256-GCM encryption for HODL invoice preimages at rest.
 
 **Encryption details:**
 - AES-256-GCM with a 12-byte random nonce and 16-byte authentication tag

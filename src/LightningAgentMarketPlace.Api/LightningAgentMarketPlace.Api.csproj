@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>73ae1af8-c6dd-493e-b15b-f88ff59790a9</UserSecretsId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Mvc" Version="8.1.0" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="8.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LightningAgentMarketPlace.Core\LightningAgentMarketPlace.Core.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Data\LightningAgentMarketPlace.Data.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Lightning\LightningAgentMarketPlace.Lightning.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Chainlink\LightningAgentMarketPlace.Chainlink.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Acp\LightningAgentMarketPlace.Acp.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.AI\LightningAgentMarketPlace.AI.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Verification\LightningAgentMarketPlace.Verification.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.Engine\LightningAgentMarketPlace.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

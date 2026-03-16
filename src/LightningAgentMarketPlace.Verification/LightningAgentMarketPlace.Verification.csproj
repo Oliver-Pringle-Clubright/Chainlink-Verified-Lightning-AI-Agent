@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LightningAgentMarketPlace.Core\LightningAgentMarketPlace.Core.csproj" />
+    <ProjectReference Include="..\LightningAgentMarketPlace.AI\LightningAgentMarketPlace.AI.csproj" />
+  </ItemGroup>
+
+</Project>

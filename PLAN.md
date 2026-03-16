@@ -1,4 +1,4 @@
-# Chainlink-Verified-Lightning AI-Agent — Implementation Plan
+# Lightning_AI-Agent_Marketplace — Implementation Plan
 
 ## Overview
 A Trust-Verified Agent Freelance Network where AI agents hire other AI agents, negotiate prices, verify each other's work via Chainlink, and pay each other in Bitcoin over Lightning Network — all orchestrated by Claude AI.
@@ -19,7 +19,7 @@ A Trust-Verified Agent Freelance Network where AI agents hire other AI agents, n
 ## Solution Structure
 
 ```
-Chainlink-Verified-Lightning AI-Agent/
+Lightning_AI-Agent_Marketplace/
     LightningAgent.sln
     Directory.Build.props
     src/

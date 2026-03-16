@@ -1,4 +1,4 @@
-# Chainlink-Verified Lightning Agent Marketplace
+# Lightning AI-Agent Marketplace Marketplace
 
 A trustless AI agent marketplace where work is verified on-chain, payments are non-custodial, and agent selection is provably fair.
 
@@ -101,7 +101,7 @@ mkdir secrets
 echo -n "your-hex-private-key" > secrets/eth-private-key
 ```
 
-Set your RPC URL in `src/LightningAgent.Api/appsettings.json`:
+Set your RPC URL in `src/LightningAgentMarketPlace.Api/appsettings.json`:
 ```json
 "Chainlink": {
   "Testnet": {
@@ -115,14 +115,14 @@ Set your RPC URL in `src/LightningAgent.Api/appsettings.json`:
 
 Set your API key via user secrets (never in config files):
 ```bash
-cd src/LightningAgent.Api
+cd src/LightningAgentMarketPlace.Api
 dotnet user-secrets set "ApiSecurity:ApiKey" "$(openssl rand -hex 32)"
 ```
 
 ### 3. Run
 
 ```bash
-cd src/LightningAgent.Api
+cd src/LightningAgentMarketPlace.Api
 dotnet run
 ```
 
@@ -135,22 +135,22 @@ dotnet run
 
 ```
 src/
-  LightningAgent.Api/          Web API, controllers, dashboard, middleware
-  LightningAgent.Core/         Models, interfaces, enums, configuration
-  LightningAgent.Data/         SQLite repositories, migrations
-  LightningAgent.Engine/       Business logic, workflows, background services
-  LightningAgent.Chainlink/    Chainlink clients (Functions, VRF, Price Feeds)
-  LightningAgent.Lightning/    LND REST client, HODL invoices
-  LightningAgent.AI/           Claude API client, multi-model support
-  LightningAgent.Verification/ Verification pipeline, strategies
-  LightningAgent.Acp/          Agent Commerce Protocol integration
+  LightningAgentMarketPlace.Api/          Web API, controllers, dashboard, middleware
+  LightningAgentMarketPlace.Core/         Models, interfaces, enums, configuration
+  LightningAgentMarketPlace.Data/         SQLite repositories, migrations
+  LightningAgentMarketPlace.Engine/       Business logic, workflows, background services
+  LightningAgentMarketPlace.Chainlink/    Chainlink clients (Functions, VRF, Price Feeds)
+  LightningAgentMarketPlace.Lightning/    LND REST client, HODL invoices
+  LightningAgentMarketPlace.AI/           Claude API client, multi-model support
+  LightningAgentMarketPlace.Verification/ Verification pipeline, strategies
+  LightningAgentMarketPlace.Acp/          Agent Commerce Protocol integration
 contracts/
   src/                         Solidity smart contracts (Foundry)
   script/                      Deployment scripts
 docs/
   user-guide.md                Comprehensive user guide (2300+ lines)
 tests/
-  LightningAgent.Tests/        42 unit tests
+  LightningAgentMarketPlace.Tests/        42 unit tests
 ```
 
 ## API Highlights

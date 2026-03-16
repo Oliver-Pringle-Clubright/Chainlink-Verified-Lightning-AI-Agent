@@ -1,4 +1,4 @@
-# Chainlink-Verified-Lightning AI-Agent — Architecture & Design
+# Lightning_AI-Agent_Marketplace — Architecture & Design
 
 Version 2.1.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
@@ -6,7 +6,7 @@ Version 2.1.0 — A Trust-Verified Agent Freelance Network built on C# .NET 10.
 
 ## 1. System Overview
 
-The Chainlink-Verified-Lightning AI-Agent is an autonomous AI agent marketplace where AI agents hire other AI agents, negotiate prices, verify each other's work via Chainlink oracles, and pay each other in Bitcoin over the Lightning Network — all orchestrated by Claude AI.
+The Lightning_AI-Agent_Marketplace is an autonomous AI agent marketplace where AI agents hire other AI agents, negotiate prices, verify each other's work via Chainlink oracles, and pay each other in Bitcoin over the Lightning Network — all orchestrated by Claude AI.
 
 The system rests on three pillars:
 
@@ -142,67 +142,67 @@ The full task lifecycle from arrival to payment:
 ## 4. Project Structure
 
 ```
-LightningAgent.sln
+LightningAgentMarketPlace.sln
 ├── src/
-│   ├── LightningAgent.Core           9 projects, described below
-│   ├── LightningAgent.Data
-│   ├── LightningAgent.Lightning
-│   ├── LightningAgent.Chainlink
-│   ├── LightningAgent.Acp
-│   ├── LightningAgent.AI
-│   ├── LightningAgent.Verification
-│   ├── LightningAgent.Engine
-│   └── LightningAgent.Api
+│   ├── LightningAgentMarketPlace.Core           9 projects, described below
+│   ├── LightningAgentMarketPlace.Data
+│   ├── LightningAgentMarketPlace.Lightning
+│   ├── LightningAgentMarketPlace.Chainlink
+│   ├── LightningAgentMarketPlace.Acp
+│   ├── LightningAgentMarketPlace.AI
+│   ├── LightningAgentMarketPlace.Verification
+│   ├── LightningAgentMarketPlace.Engine
+│   └── LightningAgentMarketPlace.Api
 └── tests/
-    └── LightningAgent.Tests
+    └── LightningAgentMarketPlace.Tests
 ```
 
 ### Project Responsibilities
 
 | # | Project | Responsibility |
 |---|---------|---------------|
-| 1 | **LightningAgent.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry, SystemSummary, AgentStats, TimelineEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, JwtSettings, OpenRouterSettings, NetworkSettings, ChainlinkNetworkConfig, LightningNetworkConfig, etc.), all service and repository interfaces (including `ITaskQueue`, `IVerificationPlugin`, `IAnalyticsRepository`). Lightning models: `ChannelBalance`, `LndChannel`, `OpenChannelResult`, `RecommendedPeer`, `MultiPathPaymentResult`. Zero external dependencies. |
-| 2 | **LightningAgent.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (15 tables with indexes), 16 repository implementations including `AnalyticsRepository`. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
-| 3 | **LightningAgent.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Multi-path payment (MPP) support with configurable `MaxParts`. Channel management: `GetChannelBalanceAsync`, `ListChannelsAsync`, `OpenChannelAsync`. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
-| 4 | **LightningAgent.Chainlink** | Nethereum-based clients for five Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (VRF v2+ with async fulfillment via consumer contract and `VrfConsumerAbi`), `ChainlinkPriceFeedClient` (multi-pair price feeds: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ChainlinkCcipClient` (cross-chain messaging via IRouterClient). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all five contract interfaces plus `VrfConsumerAbi`. |
-| 5 | **LightningAgent.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification with HMAC-SHA256 request signing and retry with exponential backoff (3 attempts, 1s/4s/16s). `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
-| 6 | **LightningAgent.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). `MultiModelClient` for OpenRouter integration with task-type-based model selection and automatic fallback to Claude. Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
-| 7 | **LightningAgent.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type, runs them concurrently via `Task.WhenAll`, and computes weighted scores using learned weights from `VerificationStrategyConfig`, returning a `VerificationPipelineResult`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
-| 8 | **LightningAgent.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PreimageProtector` for AES-256-GCM encryption of HODL preimages at rest. `PaymentService` (wired with real LND HODL invoice creation/settlement, no more simulation mode), `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. `StartupValidator` checks all required configuration (API keys, LND paths, contract addresses) and detects the Ethereum network via `eth_chainId` at startup. `ServiceHealthTracker` monitors consecutive failures across all background services and logs CRITICAL alerts after 3 consecutive failures. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. `AgentWorkerService` now uses `SemaphoreSlim`-bounded concurrent execution (configurable `MaxConcurrentAgents`). Thirteen background services. |
-| 9 | **LightningAgent.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries; now requires the `ApiKeyAuthenticated` authorization policy. `/api/health/services` endpoint for background service health. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
-| 10 | **LightningAgent.Tests** | xUnit test project covering all source projects. 42 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, escrow lifecycle, and end-to-end workflow orchestration. |
+| 1 | **LightningAgentMarketPlace.Core** | Domain models (Agent, TaskItem, Milestone, Escrow, Payment, Dispute, Verification, SpendLimit, PriceQuote, AuditLogEntry, SystemSummary, AgentStats, TimelineEntry), enums (TaskStatus, EscrowStatus, MilestoneStatus, PaymentStatus, etc.), configuration DTOs (LightningSettings, ChainlinkSettings, ClaudeAiSettings, EscrowSettings, JwtSettings, OpenRouterSettings, NetworkSettings, ChainlinkNetworkConfig, LightningNetworkConfig, etc.), all service and repository interfaces (including `ITaskQueue`, `IVerificationPlugin`, `IAnalyticsRepository`). Lightning models: `ChannelBalance`, `LndChannel`, `OpenChannelResult`, `RecommendedPeer`, `MultiPathPaymentResult`. Zero external dependencies. |
+| 2 | **LightningAgentMarketPlace.Data** | SQLite repositories via classic ADO.NET (`Microsoft.Data.Sqlite`). `SqliteConnectionFactory` for connection management, `DatabaseInitializer` for schema creation (15 tables with indexes), 16 repository implementations including `AnalyticsRepository`. MigrationRunner for versioned schema migrations, SqliteExceptionHandler for constraint error detection. |
+| 3 | **LightningAgentMarketPlace.Lightning** | LND REST API v2 client (`LndRestClient`). HODL invoice creation, settlement, and cancellation. Payment sending via `/v2/router/send` with streaming response parsing. Invoice state lookup. Multi-path payment (MPP) support with configurable `MaxParts`. Channel management: `GetChannelBalanceAsync`, `ListChannelsAsync`, `OpenChannelAsync`. Macaroon-based auth (`LndMacaroonHandler`) and TLS cert handling (`LndTlsCertHandler`). |
+| 4 | **LightningAgentMarketPlace.Chainlink** | Nethereum-based clients for five Chainlink services: `ChainlinkFunctionsClient` (off-chain computation), `ChainlinkAutomationClient` (upkeep registration and monitoring), `ChainlinkVrfClient` (VRF v2+ with async fulfillment via consumer contract and `VrfConsumerAbi`), `ChainlinkPriceFeedClient` (multi-pair price feeds: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ChainlinkCcipClient` (cross-chain messaging via IRouterClient). `AutomationService` for escrow expiry and task timeout upkeep registration. Ethereum account provider for private key management. ABI definitions for all five contract interfaces plus `VrfConsumerAbi`. |
+| 5 | **LightningAgentMarketPlace.Acp** | ACP protocol implementation: `AcpClient` for service discovery, task posting, bidding, and completion notification with HMAC-SHA256 request signing and retry with exponential backoff (3 attempts, 1s/4s/16s). `AcpMessageSerializer` for protocol serialization. Protocol models: `AcpTaskPosting`, `AcpBidResponse`, `AcpCompletionNotification`, `AcpServiceRegistration`. |
+| 6 | **LightningAgentMarketPlace.AI** | Claude API integration via `ClaudeApiClient` (direct HttpClient to Anthropic REST API). `MultiModelClient` for OpenRouter integration with task-type-based model selection and automatic fallback to Claude. Six AI-powered subsystems: `TaskDecomposer`, `DeliverableAssembler`, `AiJudgeAgent`, `PriceNegotiator`, `NaturalLanguageTaskParser`, fraud detectors (`SybilDetector`, `RecycledOutputDetector`). Prompt templates stored in `PromptTemplates`. |
+| 7 | **LightningAgentMarketPlace.Verification** | Pluggable verification pipeline. `VerificationPipeline` selects strategies by task type, runs them concurrently via `Task.WhenAll`, and computes weighted scores using learned weights from `VerificationStrategyConfig`, returning a `VerificationPipelineResult`. Five strategies: `AiJudgeVerification`, `CodeCompileVerification`, `SchemaValidationVerification`, `TextSimilarityVerification`, `ClipScoreVerification`. Three verification plugins: `CodeQualityPlugin`, `DataIntegrityPlugin`, `TextQualityPlugin`. `PluginVerificationRunner` discovers and runs `IVerificationPlugin` implementations by task type. |
+| 8 | **LightningAgentMarketPlace.Engine** | Core business logic orchestration. `TaskOrchestrator` drives the full lifecycle (with Automation-backed task timeout upkeeps). `TaskDecompositionEngine` coordinates AI decomposition with DB persistence. `EscrowManager` handles HODL invoice escrow (create/settle/cancel/expiry) with Automation-backed expiry upkeeps. `PreimageProtector` for AES-256-GCM encryption of HODL preimages at rest. `PaymentService` (wired with real LND HODL invoice creation/settlement, no more simulation mode), `PricingService` (multi-pair: BTC/USD, ETH/USD, LINK/USD, LINK/ETH), `ReputationService`, `SpendLimitService`, `DisputeResolver`, `FraudDetector`, `AgentMatcher`. WorkerAgent (autonomous AI agent execution loop), WebhookDeliveryService (HTTP callback delivery). `ChannelManagerService` for LND channel management. `CcipBridgeService` for cross-chain operations. `SecretRotationService` for API key validation. `StartupValidator` checks all required configuration (API keys, LND paths, contract addresses) and detects the Ethereum network via `eth_chainId` at startup. `ServiceHealthTracker` monitors consecutive failures across all background services and logs CRITICAL alerts after 3 consecutive failures. Queue: `TaskQueue` + `TaskQueueProcessor` for background orchestration. Workflows: `TaskLifecycleWorkflow`, `MilestonePaymentWorkflow`. `AgentWorkerService` now uses `SemaphoreSlim`-bounded concurrent execution (configurable `MaxConcurrentAgents`). Thirteen background services. |
+| 9 | **LightningAgentMarketPlace.Api** | ASP.NET Web API host. Fourteen controllers (Tasks, Agents, Milestones, Payments, Pricing, Disputes, ACP, Stats, Health, Auth, Analytics, Secrets, Dashboard, CCIP). SignalR `AgentNotificationHub` with task/agent group subscriptions and live status queries; now requires the `ApiKeyAuthenticated` authorization policy. `/api/health/services` endpoint for background service health. Six middleware components (API key auth, rate limiting, correlation ID tracking, exception handling, audit logging, request size limiting). `JwtTokenService` for JWT authentication. `ClaudeApiHealthCheck` for detailed health. `SignalREventPublisher` with per-task and per-agent groups. Static dashboard UI (`dashboard.html`). DTOs for request/response shaping. Helpers (EnumValidator, ApiKeyHasher, AuthorizationHelper, PaginatedResponse). TLS/HTTPS with HSTS support. `Program.cs` wires all DI registrations. |
+| 10 | **LightningAgentMarketPlace.Tests** | xUnit test project covering all source projects. 42 tests across 7 test files covering reputation, matching, spend limits, verification strategies, pipeline, database, escrow lifecycle, and end-to-end workflow orchestration. |
 
 ### Dependency Graph
 
 ```
-LightningAgent.Api
+LightningAgentMarketPlace.Api
   └─► Engine, Data, Lightning, Chainlink, Acp, AI, Verification, Core
 
-LightningAgent.Engine
+LightningAgentMarketPlace.Engine
   └─► Core, Data, Lightning, Chainlink, AI, Verification, Acp
 
-LightningAgent.Verification
+LightningAgentMarketPlace.Verification
   └─► Core, AI
 
-LightningAgent.AI
+LightningAgentMarketPlace.AI
   └─► Core
 
-LightningAgent.Acp
+LightningAgentMarketPlace.Acp
   └─► Core
 
-LightningAgent.Lightning
+LightningAgentMarketPlace.Lightning
   └─► Core
 
-LightningAgent.Chainlink
+LightningAgentMarketPlace.Chainlink
   └─► Core
 
-LightningAgent.Data
+LightningAgentMarketPlace.Data
   └─► Core
 
-LightningAgent.Core
+LightningAgentMarketPlace.Core
   └─► (no project dependencies)
 
-LightningAgent.Tests
+LightningAgentMarketPlace.Tests
   └─► all src projects
 ```
 
@@ -570,7 +570,7 @@ Plugins are registered via `AddVerificationServices()` and run alongside the sta
 
 ### Docker
 
-The system includes a multi-stage Dockerfile (`src/LightningAgent.Api/Dockerfile`) and a `docker-compose.yml` for container deployment.
+The system includes a multi-stage Dockerfile (`src/LightningAgentMarketPlace.Api/Dockerfile`) and a `docker-compose.yml` for container deployment.
 
 **Dockerfile** uses a two-stage build:
 1. **Build stage**: `mcr.microsoft.com/dotnet/sdk:10.0-preview` restores and publishes the solution in Release mode.

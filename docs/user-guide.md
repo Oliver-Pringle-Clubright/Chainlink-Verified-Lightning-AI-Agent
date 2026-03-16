@@ -59,15 +59,15 @@ The solution is organized into these projects:
 
 | Project | Responsibility |
 |---|---|
-| `LightningAgent.Api` | REST controllers, SignalR hub, middleware |
-| `LightningAgent.Core` | Domain models, enums, interfaces, events |
-| `LightningAgent.Data` | SQLite repositories (ADO.NET) |
-| `LightningAgent.Lightning` | LND REST client, HODL invoice management |
-| `LightningAgent.Chainlink` | Functions, VRF, Automation, Price Feed clients |
-| `LightningAgent.AI` | Claude API client, task decomposition, fraud detection, AI judge |
-| `LightningAgent.Verification` | Multi-strategy verification pipeline |
-| `LightningAgent.Acp` | Agentic Commerce Protocol models and client |
-| `LightningAgent.Engine` | Orchestrator, escrow manager, workflows, background jobs |
+| `LightningAgentMarketPlace.Api` | REST controllers, SignalR hub, middleware |
+| `LightningAgentMarketPlace.Core` | Domain models, enums, interfaces, events |
+| `LightningAgentMarketPlace.Data` | SQLite repositories (ADO.NET) |
+| `LightningAgentMarketPlace.Lightning` | LND REST client, HODL invoice management |
+| `LightningAgentMarketPlace.Chainlink` | Functions, VRF, Automation, Price Feed clients |
+| `LightningAgentMarketPlace.AI` | Claude API client, task decomposition, fraud detection, AI judge |
+| `LightningAgentMarketPlace.Verification` | Multi-strategy verification pipeline |
+| `LightningAgentMarketPlace.Acp` | Agentic Commerce Protocol models and client |
+| `LightningAgentMarketPlace.Engine` | Orchestrator, escrow manager, workflows, background jobs |
 
 ---
 
@@ -103,10 +103,10 @@ git clone <repo-url>
 cd Chainlink-Verified-Lightning\ AI-Agent
 
 # Restore dependencies and build the entire solution
-dotnet build LightningAgent.sln
+dotnet build LightningAgentMarketPlace.sln
 
 # Run the API server
-dotnet run --project src/LightningAgent.Api
+dotnet run --project src/LightningAgentMarketPlace.Api
 ```
 
 The API starts at **http://localhost:5000** by default.
@@ -115,7 +115,7 @@ The API starts at **http://localhost:5000** by default.
 
 ```bash
 # Run the test suite
-dotnet test LightningAgent.sln
+dotnet test LightningAgentMarketPlace.sln
 ```
 
 ### Access the API
@@ -127,7 +127,7 @@ dotnet test LightningAgent.sln
 
 ## 4. Configuration
 
-All configuration lives in `src/LightningAgent.Api/appsettings.json`. Each section is explained below. You can also use `appsettings.Development.json` for local overrides, environment variables, or user secrets.
+All configuration lives in `src/LightningAgentMarketPlace.Api/appsettings.json`. Each section is explained below. You can also use `appsettings.Development.json` for local overrides, environment variables, or user secrets.
 
 **Startup Validation (v2.0.0):** The application validates configuration at startup. In production mode (`DevMode=false`), missing `ClaudeAi:ApiKey` or `Lightning:LndRestUrl` will halt startup with a clear error message. Other missing settings (Chainlink contract addresses, LND certificate paths) produce warnings but allow the application to start.
 
@@ -332,8 +332,8 @@ The same pattern applies to the `Chainlink` section (e.g., `Chainlink:Testnet:Et
 ```json
 "Jwt": {
   "Secret": "your-secret-key-at-least-32-characters-long",
-  "Issuer": "LightningAgent",
-  "Audience": "LightningAgent",
+  "Issuer": "LightningAgentMarketPlace",
+  "Audience": "LightningAgentMarketPlace",
   "ExpiryMinutes": 60
 }
 ```
@@ -341,8 +341,8 @@ The same pattern applies to the `Chainlink` section (e.g., `Chainlink:Testnet:Et
 | Setting | Description |
 |---|---|
 | `Secret` | HMAC-SHA256 signing key for JWT tokens. Must be at least 32 characters. When empty, JWT authentication is not enabled. |
-| `Issuer` | Token issuer claim. Default: `LightningAgent`. |
-| `Audience` | Token audience claim. Default: `LightningAgent`. |
+| `Issuer` | Token issuer claim. Default: `LightningAgentMarketPlace`. |
+| `Audience` | Token audience claim. Default: `LightningAgentMarketPlace`. |
 | `ExpiryMinutes` | Token lifetime in minutes. Default: `60` (1 hour). |
 
 JWT authentication works alongside API key authentication. You can exchange an API key for a JWT token via `POST /api/auth/token`, then use `Authorization: Bearer <token>` for subsequent requests. See [JWT Authentication](#12-jwt-authentication) for details.
@@ -1868,7 +1868,7 @@ This starts:
 ### Build the Docker Image Manually
 
 ```bash
-docker build -f src/LightningAgent.Api/Dockerfile -t lightningagent-api .
+docker build -f src/LightningAgentMarketPlace.Api/Dockerfile -t lightningagent-api .
 docker run -p 5000:8080 lightningagent-api
 ```
 

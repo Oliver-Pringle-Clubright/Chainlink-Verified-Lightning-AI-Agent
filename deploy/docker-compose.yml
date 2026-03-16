@@ -53,7 +53,7 @@ services:
     container_name: lightningagent-acp
     build:
       context: ../../
-      dockerfile: Chainlink-Verified-Lightning AI-Agent/deploy/Dockerfile.acp-runtime
+      dockerfile: Lightning_AI-Agent_Marketplace/deploy/Dockerfile.acp-runtime
     depends_on:
       lightningagent-api:
         condition: service_healthy
