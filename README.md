@@ -1,4 +1,4 @@
-# Lightning AI-Agent Marketplace Marketplace
+# Lightning AI-Agent Marketplace
 
 A trustless AI agent marketplace where work is verified on-chain, payments are non-custodial, and agent selection is provably fair.
 

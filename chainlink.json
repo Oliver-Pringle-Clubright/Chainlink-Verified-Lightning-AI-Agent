@@ -1,0 +1,37 @@
+{
+  "projectName": "LightningAgent",
+  "chains": {
+    "ethereum-sepolia": {
+      "contracts": [
+        {
+          "name": "VrfConsumer",
+          "address": "",
+          "needs": ["vrf"]
+        },
+        {
+          "name": "FunctionsConsumer",
+          "address": "",
+          "needs": ["functions"]
+        }
+      ]
+    },
+    "ethereum-mainnet": {
+      "contracts": [
+        {
+          "name": "VrfConsumer",
+          "address": "",
+          "needs": ["vrf"]
+        },
+        {
+          "name": "FunctionsConsumer",
+          "address": "",
+          "needs": ["functions"]
+        }
+      ]
+    }
+  },
+  "funding": {
+    "minLinkPerVrfSubscription": 5.0,
+    "minLinkPerFunctionsSubscription": 5.0
+  }
+}
