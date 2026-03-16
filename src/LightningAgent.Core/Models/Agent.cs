@@ -17,6 +17,7 @@ public class Agent
     public string? EthAddress { get; set; }
     public long? PreferredChainId { get; set; }
     public string? PreferredPaymentMethod { get; set; }
+    public bool IsEarlyAdopter { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

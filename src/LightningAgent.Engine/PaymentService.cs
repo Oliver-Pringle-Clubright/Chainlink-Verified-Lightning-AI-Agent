@@ -15,6 +15,7 @@ public class PaymentService : IPaymentService
     private readonly IEscrowRepository _escrowRepo;
     private readonly IPaymentRepository _paymentRepo;
     private readonly IMilestoneRepository _milestoneRepo;
+    private readonly ITaskRepository _taskRepo;
     private readonly ILightningClient _lightning;
     private readonly IEventPublisher _eventPublisher;
     private readonly PlatformFeeSettings _feeSettings;
@@ -25,6 +26,7 @@ public class PaymentService : IPaymentService
         IEscrowRepository escrowRepo,
         IPaymentRepository paymentRepo,
         IMilestoneRepository milestoneRepo,
+        ITaskRepository taskRepo,
         ILightningClient lightning,
         IEventPublisher eventPublisher,
         IOptions<PlatformFeeSettings> feeSettings,
@@ -34,6 +36,7 @@ public class PaymentService : IPaymentService
         _escrowRepo = escrowRepo;
         _paymentRepo = paymentRepo;
         _milestoneRepo = milestoneRepo;
+        _taskRepo = taskRepo;
         _lightning = lightning;
         _eventPublisher = eventPublisher;
         _feeSettings = feeSettings.Value;
@@ -52,8 +55,25 @@ public class PaymentService : IPaymentService
             ? escrow.AmountSats
             : milestone.PayoutSats;
 
-        long commissionSats = (long)(grossAmount * _feeSettings.CommissionRate);
-        long verificationFeeSats = _feeSettings.VerificationFeeSats;
+        // Check if the assigned agent is an early adopter (25% discount on fees)
+        double discount = 0;
+        try
+        {
+            var task = await _taskRepo.GetByIdAsync(milestone.TaskId, ct);
+            if (task?.AssignedAgentId > 0)
+            {
+                var agent = await _agentRepo.GetByIdAsync(task.AssignedAgentId.Value, ct);
+                if (agent?.IsEarlyAdopter == true)
+                {
+                    discount = _feeSettings.EarlyAdopterDiscount;
+                    _logger.LogInformation("Early adopter discount applied for agent {AgentId}: {Discount:P0} off fees", agent.Id, discount);
+                }
+            }
+        }
+        catch { /* best effort — fees apply at full rate if lookup fails */ }
+
+        long commissionSats = (long)(grossAmount * _feeSettings.CommissionRate * (1 - discount));
+        long verificationFeeSats = (long)(_feeSettings.VerificationFeeSats * (1 - discount));
         long totalFees = commissionSats + verificationFeeSats;
         long agentPayout = Math.Max(1, grossAmount - totalFees);
 

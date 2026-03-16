@@ -258,5 +258,18 @@ public class MigrationRunner
             ALTER TABLE Tasks ADD COLUMN PaymentChainId INTEGER;
             ALTER TABLE Tasks ADD COLUMN ClientWalletAddress TEXT;
         ");
+
+        yield return ("2.5.0", "Add IsEarlyAdopter and PlatformFees table", @"
+            ALTER TABLE Agents ADD COLUMN IsEarlyAdopter INTEGER NOT NULL DEFAULT 0;
+            CREATE TABLE IF NOT EXISTS PlatformFees (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                FeeType TEXT NOT NULL,
+                TaskId INTEGER,
+                MilestoneId INTEGER,
+                PaymentId INTEGER,
+                AmountSats INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+        ");
     }
 }

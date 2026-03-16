@@ -16,4 +16,7 @@ public class RegisterAgentResponse
     /// Warning that the API key will not be shown again.
     /// </summary>
     public string? ApiKeyWarning { get; set; }
+
+    public bool IsEarlyAdopter { get; set; }
+    public string? EarlyAdopterMessage { get; set; }
 }

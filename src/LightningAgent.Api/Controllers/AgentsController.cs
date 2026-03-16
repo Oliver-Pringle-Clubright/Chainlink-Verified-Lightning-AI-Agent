@@ -1,11 +1,13 @@
 using LightningAgent.Api.DTOs;
 using LightningAgent.Api.Helpers;
+using LightningAgent.Core.Configuration;
 using LightningAgent.Core.Enums;
 using LightningAgent.Core.Interfaces.Data;
 using LightningAgent.Core.Interfaces.Services;
 using LightningAgent.Core.Models;
 using LightningAgent.Data;
 using Asp.Versioning;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using TaskStatus = LightningAgent.Core.Enums.TaskStatus;
@@ -28,6 +30,7 @@ public class AgentsController : ControllerBase
     private readonly ITaskRepository _taskRepository;
     private readonly IEventPublisher _eventPublisher;
     private readonly ICachedDataService _cachedData;
+    private readonly PlatformFeeSettings _feeSettings;
     private readonly ILogger<AgentsController> _logger;
 
     public AgentsController(
@@ -37,6 +40,7 @@ public class AgentsController : ControllerBase
         ITaskRepository taskRepository,
         IEventPublisher eventPublisher,
         ICachedDataService cachedData,
+        IOptions<PlatformFeeSettings> feeSettings,
         ILogger<AgentsController> logger)
     {
         _agentRepository = agentRepository;
@@ -45,6 +49,7 @@ public class AgentsController : ControllerBase
         _taskRepository = taskRepository;
         _eventPublisher = eventPublisher;
         _cachedData = cachedData;
+        _feeSettings = feeSettings.Value;
         _logger = logger;
     }
 
@@ -83,6 +88,10 @@ public class AgentsController : ControllerBase
         var plaintextApiKey = Guid.NewGuid().ToString("N");
         var apiKeyHash = ApiKeyHasher.Hash(plaintextApiKey);
 
+        // Check if this agent qualifies for early adopter discount
+        var allAgents = await _agentRepository.GetAllAsync(null, ct);
+        var isEarlyAdopter = allAgents.Count < _feeSettings.EarlyAdopterSlots;
+
         var agent = new Agent
         {
             ExternalId = externalId,
@@ -91,6 +100,7 @@ public class AgentsController : ControllerBase
             WebhookUrl = request.WebhookUrl,
             ApiKeyHash = apiKeyHash,
             Status = AgentStatus.Active,
+            IsEarlyAdopter = isEarlyAdopter,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -147,10 +157,13 @@ public class AgentsController : ControllerBase
 
         await _reputationRepository.CreateAsync(reputation, ct);
 
-        // Log registration without the API key
-        _logger.LogInformation("Registered agent {AgentId} (ext: {ExternalId})", agentId, externalId);
+        _logger.LogInformation(
+            "Registered agent {AgentId} (ext: {ExternalId}, earlyAdopter: {IsEarlyAdopter})",
+            agentId, externalId, isEarlyAdopter);
 
         await _eventPublisher.PublishAgentRegisteredAsync(agentId, request.Name, ct);
+
+        var slotsRemaining = Math.Max(0, _feeSettings.EarlyAdopterSlots - allAgents.Count - 1);
 
         return Ok(new RegisterAgentResponse
         {
@@ -158,7 +171,11 @@ public class AgentsController : ControllerBase
             ExternalId = externalId,
             Status = AgentStatus.Active.ToString(),
             ApiKey = plaintextApiKey,
-            ApiKeyWarning = "Store this API key securely. It will NOT be shown again and cannot be retrieved."
+            ApiKeyWarning = "Store this API key securely. It will NOT be shown again and cannot be retrieved.",
+            IsEarlyAdopter = isEarlyAdopter,
+            EarlyAdopterMessage = isEarlyAdopter
+                ? $"You are an early adopter! You receive {_feeSettings.EarlyAdopterDiscount:P0} off all fees for life. {slotsRemaining} early adopter slots remaining."
+                : null
         });
     }
 

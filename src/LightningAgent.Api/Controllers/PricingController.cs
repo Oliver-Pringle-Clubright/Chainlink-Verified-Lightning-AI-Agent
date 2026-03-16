@@ -298,17 +298,33 @@ public class PricingController : ControllerBase
     }
 
     /// <summary>
-    /// Returns the platform fee schedule.
+    /// Returns the platform fee schedule including early adopter discount info.
     /// </summary>
     [HttpGet("fees")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public IActionResult GetFeeSchedule()
+    public async Task<IActionResult> GetFeeSchedule(
+        [FromServices] IAgentRepository agentRepo, CancellationToken ct)
     {
+        var allAgents = await agentRepo.GetAllAsync(null, ct);
+        var earlyAdoptersTaken = allAgents.Count;
+        var slotsRemaining = Math.Max(0, _feeSettings.EarlyAdopterSlots - earlyAdoptersTaken);
+        var discountRate = _feeSettings.EarlyAdopterDiscount;
+
+        long exampleGross = 10000;
+        long exCommission = (long)(exampleGross * _feeSettings.CommissionRate);
+        long exVerification = _feeSettings.VerificationFeeSats;
+        long exAgentNet = exampleGross - exCommission - exVerification;
+
+        long exDiscountedCommission = (long)(exampleGross * _feeSettings.CommissionRate * (1 - discountRate));
+        long exDiscountedVerification = (long)(_feeSettings.VerificationFeeSats * (1 - discountRate));
+        long exDiscountedNet = exampleGross - exDiscountedCommission - exDiscountedVerification;
+
         return Ok(new
         {
             commission = new
             {
                 rate = _feeSettings.CommissionRate,
+                ratePercent = $"{_feeSettings.CommissionRate:P0}",
                 description = $"{_feeSettings.CommissionRate:P0} deducted from agent payout on each milestone completion"
             },
             taskPostingFee = new
@@ -321,14 +337,30 @@ public class PricingController : ControllerBase
                 amountSats = _feeSettings.VerificationFeeSats,
                 description = "Per-milestone fee covering on-chain verification costs (gas + LINK)"
             },
+            earlyAdopter = new
+            {
+                totalSlots = _feeSettings.EarlyAdopterSlots,
+                slotsTaken = earlyAdoptersTaken,
+                slotsRemaining,
+                discountRate,
+                discountPercent = $"{discountRate:P0}",
+                description = $"First {_feeSettings.EarlyAdopterSlots} agents receive {discountRate:P0} off all fees for life"
+            },
             example = new
             {
-                taskBudget = 10000,
-                postingFee = _feeSettings.TaskPostingFeeSats,
-                milestonePayout = 10000,
-                commission = (long)(10000 * _feeSettings.CommissionRate),
-                verificationFee = _feeSettings.VerificationFeeSats,
-                agentReceives = 10000 - (long)(10000 * _feeSettings.CommissionRate) - _feeSettings.VerificationFeeSats
+                milestonePayout = exampleGross,
+                standard = new
+                {
+                    commission = exCommission,
+                    verificationFee = exVerification,
+                    agentReceives = exAgentNet
+                },
+                earlyAdopterRate = new
+                {
+                    commission = exDiscountedCommission,
+                    verificationFee = exDiscountedVerification,
+                    agentReceives = exDiscountedNet
+                }
             }
         });
     }

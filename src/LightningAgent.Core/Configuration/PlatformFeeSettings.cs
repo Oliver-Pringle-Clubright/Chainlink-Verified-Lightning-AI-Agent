@@ -22,4 +22,14 @@ public class PlatformFeeSettings
     /// Charged per milestone verification. Set to 0 to disable.
     /// </summary>
     public long VerificationFeeSats { get; set; } = 50;
+
+    /// <summary>
+    /// Number of early-adopter agent slots that receive a lifetime discount.
+    /// </summary>
+    public int EarlyAdopterSlots { get; set; } = 250;
+
+    /// <summary>
+    /// Discount rate for early-adopter agents (0.25 = 25% off all fees).
+    /// </summary>
+    public double EarlyAdopterDiscount { get; set; } = 0.25;
 }
